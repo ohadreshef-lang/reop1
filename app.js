@@ -702,10 +702,81 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Social Media Sharing Functions
+function getShareUrl() {
+    // Remove admin parameter if present
+    const url = new URL(window.location.href);
+    url.searchParams.delete('admin');
+    return url.toString();
+}
+
+function getShareText() {
+    return `${state.title} - בואו להצביע גם אתם!`;
+}
+
+function shareOnWhatsApp() {
+    const url = encodeURIComponent(getShareUrl());
+    const text = encodeURIComponent(getShareText());
+    window.open(`https://wa.me/?text=${text}%20${url}`, '_blank');
+}
+
+function shareOnFacebook() {
+    const url = encodeURIComponent(getShareUrl());
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank', 'width=600,height=400');
+}
+
+function shareOnTwitter() {
+    const url = encodeURIComponent(getShareUrl());
+    const text = encodeURIComponent(getShareText());
+    window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, '_blank', 'width=600,height=400');
+}
+
+function shareOnTelegram() {
+    const url = encodeURIComponent(getShareUrl());
+    const text = encodeURIComponent(getShareText());
+    window.open(`https://t.me/share/url?url=${url}&text=${text}`, '_blank');
+}
+
+function copyShareLink() {
+    const url = getShareUrl();
+    navigator.clipboard.writeText(url).then(() => {
+        // Show feedback
+        const feedback = document.querySelector('.copy-feedback');
+        if (feedback) {
+            feedback.classList.remove('hidden');
+            setTimeout(() => {
+                feedback.classList.add('hidden');
+            }, 2000);
+        }
+    }).catch(err => {
+        console.error('Failed to copy:', err);
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = url;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+
+        const feedback = document.querySelector('.copy-feedback');
+        if (feedback) {
+            feedback.classList.remove('hidden');
+            setTimeout(() => {
+                feedback.classList.add('hidden');
+            }, 2000);
+        }
+    });
+}
+
 // Make functions available globally for inline handlers
 window.updateOptionName = updateOptionName;
 window.deleteOption = deleteOption;
 window.updateAllocation = updateAllocation;
+window.shareOnWhatsApp = shareOnWhatsApp;
+window.shareOnFacebook = shareOnFacebook;
+window.shareOnTwitter = shareOnTwitter;
+window.shareOnTelegram = shareOnTelegram;
+window.copyShareLink = copyShareLink;
 
 // Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', init);
