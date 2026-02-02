@@ -244,11 +244,27 @@ function saveState() {
     }
 }
 
-// Update titles display in header
+// Update titles display in header and meta tags
 function updateTitlesDisplay() {
     elements.mainTitle.textContent = state.title;
     elements.mainSubtitle.textContent = state.subtitle;
     document.title = state.title;
+
+    // Update social media meta tags
+    updateMetaTag('meta[property="og:title"]', state.title);
+    updateMetaTag('meta[property="og:description"]', state.subtitle);
+    updateMetaTag('meta[name="twitter:title"]', state.title);
+    updateMetaTag('meta[name="twitter:description"]', state.subtitle);
+    updateMetaTag('meta[name="title"]', state.title);
+    updateMetaTag('meta[name="description"]', state.subtitle);
+}
+
+// Helper to update meta tags
+function updateMetaTag(selector, content) {
+    const meta = document.querySelector(selector);
+    if (meta) {
+        meta.setAttribute('content', content);
+    }
 }
 
 // Save titles (admin)
