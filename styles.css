@@ -664,3 +664,49 @@ footer {
 .slider-item, .result-item, .option-item {
     animation: fadeIn 0.3s ease;
 }
+
+/* Loading Overlay */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.95);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    gap: 1rem;
+}
+
+.loading-overlay.hidden {
+    display: none;
+}
+
+.loading-spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid var(--border-color);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.loading-overlay p {
+    color: var(--text-secondary);
+    font-size: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+    .loading-overlay {
+        background: rgba(31, 41, 55, 0.95);
+    }
+}

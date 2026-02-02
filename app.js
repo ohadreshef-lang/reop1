@@ -1,7 +1,8 @@
 // Blame Allocation App
-// State management with localStorage persistence
+// State management with Firebase (cloud) and localStorage (fallback)
 
 const APP_STORAGE_KEY = 'blameAllocationApp';
+const FIREBASE_DATA_PATH = 'blameAllocationApp';
 
 // Default titles
 const DEFAULT_TITLE = 'מי אשם בנפילת הדמוקרטיה בישראל?';
@@ -17,6 +18,9 @@ let state = {
     title: DEFAULT_TITLE,
     subtitle: DEFAULT_SUBTITLE
 };
+
+// Loading overlay element
+let loadingOverlay = null;
 
 // Check if admin mode via URL parameter
 function isAdminMode() {
@@ -76,8 +80,15 @@ const elements = {
 };
 
 // Initialize the application
-function init() {
-    loadState();
+async function init() {
+    loadingOverlay = document.getElementById('loadingOverlay');
+
+    try {
+        await loadState();
+    } catch (e) {
+        console.error('Error loading state:', e);
+    }
+
     setupEventListeners();
     render();
 
@@ -87,6 +98,53 @@ function init() {
     } else {
         initUserMode();
     }
+
+    // Hide loading overlay
+    hideLoading();
+
+    // Setup real-time listener for Firebase
+    if (typeof firebaseEnabled !== 'undefined' && firebaseEnabled && db) {
+        setupFirebaseListener();
+    }
+}
+
+// Show loading overlay
+function showLoading() {
+    if (loadingOverlay) {
+        loadingOverlay.classList.remove('hidden');
+    }
+}
+
+// Hide loading overlay
+function hideLoading() {
+    if (loadingOverlay) {
+        loadingOverlay.classList.add('hidden');
+    }
+}
+
+// Setup Firebase real-time listener
+function setupFirebaseListener() {
+    db.ref(FIREBASE_DATA_PATH).on('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            state.options = data.options || [];
+            state.votes = data.votes || [];
+            state.votedEmails = data.votedEmails || [];
+            state.title = data.title || DEFAULT_TITLE;
+            state.subtitle = data.subtitle || DEFAULT_SUBTITLE;
+
+            // Re-initialize current allocations
+            resetCurrentAllocations();
+            updateTitlesDisplay();
+            render();
+
+            // Re-populate admin fields if in admin mode
+            if (isAdminMode()) {
+                elements.editMainTitle.value = state.title;
+                elements.editSubtitle.value = state.subtitle;
+            }
+        }
+    });
 }
 
 // Initialize admin mode - skip entrance, show admin controls
@@ -112,20 +170,27 @@ function initUserMode() {
     elements.adminPanel.classList.add('hidden');
 }
 
-// Load state from localStorage
-function loadState() {
-    try {
-        const saved = localStorage.getItem(APP_STORAGE_KEY);
-        if (saved) {
-            const parsed = JSON.parse(saved);
-            state.options = parsed.options || [];
-            state.votes = parsed.votes || [];
-            state.votedEmails = parsed.votedEmails || [];
-            state.title = parsed.title || DEFAULT_TITLE;
-            state.subtitle = parsed.subtitle || DEFAULT_SUBTITLE;
+// Load state from Firebase or localStorage
+async function loadState() {
+    // Try Firebase first
+    if (typeof firebaseEnabled !== 'undefined' && firebaseEnabled && db) {
+        try {
+            const snapshot = await db.ref(FIREBASE_DATA_PATH).once('value');
+            const data = snapshot.val();
+            if (data) {
+                state.options = data.options || [];
+                state.votes = data.votes || [];
+                state.votedEmails = data.votedEmails || [];
+                state.title = data.title || DEFAULT_TITLE;
+                state.subtitle = data.subtitle || DEFAULT_SUBTITLE;
+                console.log('State loaded from Firebase');
+            }
+        } catch (e) {
+            console.error('Error loading from Firebase:', e);
+            loadFromLocalStorage();
         }
-    } catch (e) {
-        console.error('Error loading state:', e);
+    } else {
+        loadFromLocalStorage();
     }
 
     // Initialize current allocations
@@ -135,18 +200,46 @@ function loadState() {
     updateTitlesDisplay();
 }
 
-// Save state to localStorage
-function saveState() {
+// Load from localStorage (fallback)
+function loadFromLocalStorage() {
     try {
-        localStorage.setItem(APP_STORAGE_KEY, JSON.stringify({
-            options: state.options,
-            votes: state.votes,
-            votedEmails: state.votedEmails,
-            title: state.title,
-            subtitle: state.subtitle
-        }));
+        const saved = localStorage.getItem(APP_STORAGE_KEY);
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            state.options = parsed.options || [];
+            state.votes = parsed.votes || [];
+            state.votedEmails = parsed.votedEmails || [];
+            state.title = parsed.title || DEFAULT_TITLE;
+            state.subtitle = parsed.subtitle || DEFAULT_SUBTITLE;
+            console.log('State loaded from localStorage');
+        }
     } catch (e) {
-        console.error('Error saving state:', e);
+        console.error('Error loading from localStorage:', e);
+    }
+}
+
+// Save state to Firebase and localStorage
+function saveState() {
+    const dataToSave = {
+        options: state.options,
+        votes: state.votes,
+        votedEmails: state.votedEmails,
+        title: state.title,
+        subtitle: state.subtitle
+    };
+
+    // Save to Firebase if available
+    if (typeof firebaseEnabled !== 'undefined' && firebaseEnabled && db) {
+        db.ref(FIREBASE_DATA_PATH).set(dataToSave)
+            .then(() => console.log('State saved to Firebase'))
+            .catch((e) => console.error('Error saving to Firebase:', e));
+    }
+
+    // Always save to localStorage as backup
+    try {
+        localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(dataToSave));
+    } catch (e) {
+        console.error('Error saving to localStorage:', e);
     }
 }
 
