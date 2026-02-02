@@ -198,11 +198,65 @@ function exportData() {
     URL.revokeObjectURL(url);
 }
 
-// Update allocation from slider
+// Update allocation from slider with auto-balancing
 function updateAllocation(id, value) {
-    state.currentAllocations[id] = parseInt(value) || 0;
+    const newValue = parseInt(value) || 0;
+    const oldValue = state.currentAllocations[id] || 0;
+    const difference = newValue - oldValue;
+
+    // Set the new value for the changed slider
+    state.currentAllocations[id] = newValue;
+
+    // Calculate total of OTHER sliders (excluding the one being changed)
+    const otherIds = Object.keys(state.currentAllocations).filter(key => key !== id);
+    const otherTotal = otherIds.reduce((sum, key) => sum + state.currentAllocations[key], 0);
+
+    // Calculate total after change
+    const total = newValue + otherTotal;
+
+    // If total exceeds 100%, reduce other sliders proportionally
+    if (total > 100 && otherTotal > 0) {
+        const excess = total - 100;
+        const reductionRatio = Math.min(excess / otherTotal, 1);
+
+        otherIds.forEach(otherId => {
+            const currentVal = state.currentAllocations[otherId];
+            const reduction = Math.round(currentVal * reductionRatio);
+            state.currentAllocations[otherId] = Math.max(0, currentVal - reduction);
+        });
+
+        // Fix rounding errors - ensure total is exactly 100
+        const newTotal = Object.values(state.currentAllocations).reduce((sum, val) => sum + val, 0);
+        if (newTotal > 100) {
+            // Find the largest other slider and reduce it
+            const largestOther = otherIds.reduce((max, key) =>
+                state.currentAllocations[key] > state.currentAllocations[max] ? key : max
+            , otherIds[0]);
+            if (largestOther) {
+                state.currentAllocations[largestOther] -= (newTotal - 100);
+                state.currentAllocations[largestOther] = Math.max(0, state.currentAllocations[largestOther]);
+            }
+        }
+
+        // Update all slider displays and inputs
+        updateAllSliders();
+    } else {
+        updateSliderDisplay(id, newValue);
+    }
+
     updateTotalDisplay();
-    updateSliderDisplay(id, value);
+}
+
+// Update all sliders UI to match state
+function updateAllSliders() {
+    Object.entries(state.currentAllocations).forEach(([id, value]) => {
+        updateSliderDisplay(id, value);
+        // Update the actual slider input
+        const slider = document.querySelector(`input[type="range"][oninput*="${id}"]`);
+        if (slider) {
+            slider.value = value;
+        }
+    });
 }
 
 // Update total display
