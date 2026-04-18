@@ -188,17 +188,16 @@ async function handleLogin(e) {
     currentUser = { userId, name, email };
     localStorage.setItem('wc2026_user', JSON.stringify(currentUser));
 
+    // Sync to Firebase in background — don't block login
     if (db) {
-        try {
-            const snap = await ref(`users/${userId}`).once('value');
-            if (!snap.exists()) {
-                await ref(`users/${userId}`).set({ name, email, totalPoints: 0 });
-            } else {
-                await ref(`users/${userId}/name`).set(name);
-            }
-        } catch (e) {
-            console.warn('Firebase write failed (check rules):', e.message);
-        }
+        ref(`users/${userId}`).once('value')
+            .then(snap => {
+                if (!snap.exists()) {
+                    return ref(`users/${userId}`).set({ name, email, totalPoints: 0 });
+                }
+                return ref(`users/${userId}/name`).set(name);
+            })
+            .catch(err => console.warn('Firebase user sync failed:', err.message));
     }
 
     enterApp();
