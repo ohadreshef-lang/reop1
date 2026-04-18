@@ -189,13 +189,15 @@ async function handleLogin(e) {
     localStorage.setItem('wc2026_user', JSON.stringify(currentUser));
 
     if (db) {
-        // Create or update user in Firebase (preserve existing points)
-        const snap = await ref(`users/${userId}`).once('value');
-        if (!snap.exists()) {
-            await ref(`users/${userId}`).set({ name, email, totalPoints: 0 });
-        } else {
-            // Update name in case it changed
-            await ref(`users/${userId}/name`).set(name);
+        try {
+            const snap = await ref(`users/${userId}`).once('value');
+            if (!snap.exists()) {
+                await ref(`users/${userId}`).set({ name, email, totalPoints: 0 });
+            } else {
+                await ref(`users/${userId}/name`).set(name);
+            }
+        } catch (e) {
+            console.warn('Firebase write failed (check rules):', e.message);
         }
     }
 
@@ -221,14 +223,24 @@ function handleLogout() {
 // ============================================================
 
 function startFirebaseListeners() {
-    if (!db) return;
+    if (!db) {
+        renderMatches();
+        renderLeaderboard();
+        renderMyBets();
+        return;
+    }
+
+    const permissionError = () => {
+        $('matches-container').innerHTML =
+            '<p class="state-msg" style="color:#e53e3e">⚠️ שגיאת הרשאות Firebase.<br>עדכן את חוקי מסד הנתונים ל-read/write פתוח.<br><a href="https://console.firebase.google.com" target="_blank">פתח Firebase Console</a></p>';
+    };
 
     // Matches
     ref('matches').on('value', snap => {
         matches = snap.val() || {};
         if (activeTab === 'matches') renderMatches();
         if (activeTab === 'my-bets') renderMyBets();
-    });
+    }, permissionError);
 
     // All users (leaderboard)
     ref('users').on('value', snap => {
@@ -237,7 +249,7 @@ function startFirebaseListeners() {
             .map(([id, u]) => ({ userId: id, ...u }))
             .sort((a, b) => (b.totalPoints || 0) - (a.totalPoints || 0));
         if (activeTab === 'leaderboard') renderLeaderboard();
-    });
+    }, () => {});
 
     // Current user's bets
     if (currentUser) {
@@ -245,7 +257,7 @@ function startFirebaseListeners() {
             userBets = snap.val() || {};
             if (activeTab === 'matches')  renderMatches();
             if (activeTab === 'my-bets') renderMyBets();
-        });
+        }, () => {});
     }
 }
 
