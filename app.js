@@ -147,8 +147,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Modal cancel buttons
     $('btn-cancel-result').addEventListener('click', () => hide('result-modal'));
     $('btn-cancel-edit').addEventListener('click',   () => hide('edit-modal'));
+    $('btn-cancel-edit-user').addEventListener('click', () => hide('edit-user-modal'));
     $('btn-save-result').addEventListener('click', saveResult);
     $('btn-save-edit').addEventListener('click', saveEditMatch);
+    $('btn-save-edit-user').addEventListener('click', saveEditUser);
 
     // Admin back
     $('btn-admin-back').addEventListener('click', () => {
@@ -578,6 +580,7 @@ function attemptAdminLogin() {
             hide('admin-auth');
             show('admin-content');
             loadAdminMatches();
+            loadAdminUsers();
         } else {
             showEl(errEl);
         }
@@ -787,6 +790,72 @@ async function recalcPoints(matchId, resG1, resG2) {
     }
 }
 
+
+// ============================================================
+// ADMIN: USERS MANAGEMENT
+// ============================================================
+
+function loadAdminUsers() {
+    if (!db) return;
+    ref('users').on('value', snap => {
+        renderAdminUsers(snap.val() || {});
+    });
+}
+
+function renderAdminUsers(data) {
+    const container = $('admin-users-container');
+    const list = Object.entries(data)
+        .sort((a, b) => (b[1].totalPoints || 0) - (a[1].totalPoints || 0));
+
+    if (list.length === 0) {
+        container.innerHTML = '<p class="state-msg">אין משתמשים רשומים.</p>';
+        return;
+    }
+
+    let html = '';
+    list.forEach(([userId, u]) => {
+        html += `
+        <div class="admin-match-row" id="admin-user-row-${userId}">
+            <div class="admin-match-info">
+                <div class="admin-match-teams">${escapeHtml(u.name)}</div>
+                <div class="admin-match-meta">${escapeHtml(u.email)} · ${u.totalPoints || 0} נק'</div>
+            </div>
+            <div class="admin-match-actions">
+                <button class="btn btn-secondary btn-sm" onclick="openEditUserModal('${userId}')">ערוך שם</button>
+                <button class="btn btn-danger btn-sm" onclick="adminDeleteUser('${userId}', '${escapeHtml(u.name).replace(/'/g, "\\'")}')">מחק</button>
+            </div>
+        </div>`;
+    });
+
+    container.innerHTML = html;
+}
+
+function openEditUserModal(userId) {
+    ref(`users/${userId}`).once('value').then(snap => {
+        const u = snap.val();
+        if (!u) return;
+        $('edit-user-id').value   = userId;
+        $('edit-user-name').value = u.name;
+        show('edit-user-modal');
+    });
+}
+
+async function saveEditUser() {
+    const userId = $('edit-user-id').value;
+    const name   = $('edit-user-name').value.trim();
+    if (!name) { alert('נא להזין שם'); return; }
+    if (db) await ref(`users/${userId}/name`).set(name);
+    hide('edit-user-modal');
+}
+
+async function adminDeleteUser(userId, userName) {
+    if (!confirm(`למחוק את המשתמש "${userName}" וכל ההימורים שלו?`)) return;
+    if (!db) return;
+    await Promise.all([
+        ref(`users/${userId}`).remove(),
+        ref(`bets/${userId}`).remove(),
+    ]);
+}
 
 // ============================================================
 // SEED: WORLD CUP 2026 MATCHES

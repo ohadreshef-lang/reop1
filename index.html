@@ -169,6 +169,14 @@
                         <p class="state-msg">טוען...</p>
                     </div>
                 </div>
+
+                <!-- Users Management -->
+                <div class="admin-section">
+                    <h3>👥 ניהול משתמשים</h3>
+                    <div id="admin-users-container">
+                        <p class="state-msg">טוען...</p>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
@@ -222,6 +230,22 @@
             <div class="modal-actions">
                 <button id="btn-save-edit" class="btn btn-primary">שמור שינויים</button>
                 <button id="btn-cancel-edit" class="btn btn-ghost">ביטול</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== MODAL: Edit User ===== -->
+    <div id="edit-user-modal" class="modal-overlay hidden">
+        <div class="modal-card">
+            <h3>ערוך משתמש</h3>
+            <input type="hidden" id="edit-user-id">
+            <div class="field-group">
+                <label for="edit-user-name">שם מלא</label>
+                <input type="text" id="edit-user-name" placeholder="שם מלא...">
+            </div>
+            <div class="modal-actions">
+                <button id="btn-save-edit-user" class="btn btn-primary">שמור שינויים</button>
+                <button id="btn-cancel-edit-user" class="btn btn-ghost">ביטול</button>
             </div>
         </div>
     </div>
