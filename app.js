@@ -89,7 +89,8 @@ function formatDate(dateStr) {
     const d = new Date(dateStr);
     return d.toLocaleString('he-IL', {
         weekday: 'short', day: 'numeric', month: 'numeric',
-        hour: '2-digit', minute: '2-digit'
+        hour: '2-digit', minute: '2-digit',
+        timeZone: 'Asia/Jerusalem',
     });
 }
 
@@ -306,38 +307,19 @@ function renderMatches() {
     const matchList = Object.entries(matches)
         .map(([id, m]) => ({ id, ...m }))
         .filter(m => stageFilter === 'all' || m.stage === stageFilter)
-        .sort((a, b) => new Date(a.date) - new Date(b.date));
+        .sort((a, b) => {
+            const diff = new Date(a.date) - new Date(b.date);
+            if (diff !== 0) return diff;
+            return (a.group || '').localeCompare(b.group || '');
+        });
 
     if (matchList.length === 0) {
         container.innerHTML = '<p class="state-msg">אין משחקים להצגה. האדמין יכול לטעון את המשחקים.</p>';
         return;
     }
 
-    // Group by stage → then by group label (for group stage)
-    const grouped = {};
-    matchList.forEach(m => {
-        const key = m.stage === 'group' ? `group_${m.group || ''}` : m.stage;
-        if (!grouped[key]) grouped[key] = { stage: m.stage, group: m.group, items: [] };
-        grouped[key].items.push(m);
-    });
-
-    // Sort groups by stage order, then by group letter
-    const sortedKeys = Object.keys(grouped).sort((a, b) => {
-        const sa = STAGE_ORDER.indexOf(grouped[a].stage);
-        const sb = STAGE_ORDER.indexOf(grouped[b].stage);
-        if (sa !== sb) return sa - sb;
-        return (grouped[a].group || '').localeCompare(grouped[b].group || '');
-    });
-
     let html = '';
-    sortedKeys.forEach(key => {
-        const g = grouped[key];
-        const label = g.stage === 'group'
-            ? `${STAGE_LABELS.group} – בית ${g.group || ''}`
-            : STAGE_LABELS[g.stage] || g.stage;
-        html += `<div class="stage-group-header">${label}</div>`;
-        g.items.forEach(m => { html += buildMatchCard(m); });
-    });
+    matchList.forEach(m => { html += buildMatchCard(m); });
 
     container.innerHTML = html;
 
@@ -796,9 +778,16 @@ async function recalcPoints(matchId, resG1, resG2) {
 // ============================================================
 
 function loadAdminUsers() {
-    if (!db) return;
-    ref('users').on('value', snap => {
+    if (!db) {
+        $('admin-users-container').innerHTML = '<p class="state-msg">Firebase לא מחובר</p>';
+        return;
+    }
+    ref('users').once('value').then(snap => {
         renderAdminUsers(snap.val() || {});
+    }).catch(err => {
+        console.error('Failed to load users:', err);
+        $('admin-users-container').innerHTML =
+            '<p class="state-msg" style="color:#e53e3e">שגיאה בטעינת משתמשים.<br>בדוק הרשאות Firebase.</p>';
     });
 }
 
