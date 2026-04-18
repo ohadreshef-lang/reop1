@@ -36,6 +36,9 @@ const TEAM_FLAGS = {
     'ערב הסעודית':'🇸🇦','אוסטרליה':'🇦🇺','עיראק':'🇮🇶',
     'ירדן':'🇯🇴','אוזבקיסטן':'🇺🇿','ניו זילנד':'🇳🇿',
     'הונדורס':'🇭🇳','פנמה':'🇵🇦','קוסטה ריקה':'🇨🇷',
+    "צ'כיה":'🇨🇿','קטאר':'🇶🇦','בוסניה והרצגובינה':'🇧🇦',
+    'האיטי':'🇭🇹','קוראסאו':'🇨🇼','שוודיה':'🇸🇪',
+    'קאבו ורדה':'🇨🇻','נורווגיה':'🇳🇴',"קונגו DR":'🇨🇩','גאנה':'🇬🇭',
 };
 
 function getFlag(name) {
@@ -91,7 +94,7 @@ function formatDate(dateStr) {
 }
 
 function matchIsLocked(match) {
-    return new Date(match.date) <= new Date();
+    return new Date(match.date) - new Date() <= 60 * 60 * 1000; // lock 1 hour before kickoff
 }
 
 function $ (id) { return document.getElementById(id); }
@@ -188,20 +191,20 @@ async function handleLogin(e) {
     currentUser = { userId, name, email };
     localStorage.setItem('wc2026_user', JSON.stringify(currentUser));
 
+    // Sync to Firebase in background — don't block login
     if (db) {
-        try {
-            const snap = await ref(`users/${userId}`).once('value');
-            if (!snap.exists()) {
-                await ref(`users/${userId}`).set({ name, email, totalPoints: 0 });
-            } else {
-                await ref(`users/${userId}/name`).set(name);
-            }
-        } catch (e) {
-            console.warn('Firebase write failed (check rules):', e.message);
-        }
+        ref(`users/${userId}`).once('value')
+            .then(snap => {
+                if (!snap.exists()) {
+                    return ref(`users/${userId}`).set({ name, email, totalPoints: 0 });
+                }
+                return ref(`users/${userId}/name`).set(name);
+            })
+            .catch(err => console.warn('Firebase user sync failed:', err.message));
     }
 
-    enterApp();
+    // Reload so the init picks up the saved user — same path that already works
+    window.location.reload();
 }
 
 function handleLogout() {
@@ -565,31 +568,36 @@ function setupAdminListeners() {
     $('btn-change-password').addEventListener('click', adminChangePassword);
 }
 
-async function attemptAdminLogin() {
+function attemptAdminLogin() {
     const pwd = $('admin-password-input').value;
     const errEl = $('admin-auth-error');
     hideEl(errEl);
 
-    let storedPwd = 'admin2026';
-    if (db) {
-        const snap = await ref('settings/adminPassword').once('value');
-        if (snap.exists()) storedPwd = snap.val();
+    function doLogin(storedPwd) {
+        if (pwd === storedPwd) {
+            isAdminAuthed = true;
+            hide('admin-auth');
+            show('admin-content');
+            loadAdminMatches();
+        } else {
+            showEl(errEl);
+        }
     }
 
-    if (pwd === storedPwd) {
-        isAdminAuthed = true;
-        hide('admin-auth');
-        show('admin-content');
-        loadAdminMatches();
+    if (db) {
+        const fromFirebase = ref('settings/adminPassword').once('value')
+            .then(snap => snap.exists() ? snap.val() : 'admin2026');
+        const fallback = new Promise(resolve => setTimeout(() => resolve('admin2026'), 3000));
+        Promise.race([fromFirebase, fallback]).then(doLogin);
     } else {
-        showEl(errEl);
+        doLogin('admin2026');
     }
 }
 
-async function adminChangePassword() {
+function adminChangePassword() {
     const newPwd = $('new-password-input').value.trim();
     if (!newPwd || newPwd.length < 4) { alert('סיסמה חייבת להכיל לפחות 4 תווים'); return; }
-    if (db) await ref('settings/adminPassword').set(newPwd);
+    if (db) ref('settings/adminPassword').set(newPwd).catch(err => console.warn('Failed to save password:', err));
     $('new-password-input').value = '';
     alert('הסיסמה שונתה בהצלחה!');
 }
@@ -785,58 +793,103 @@ async function recalcPoints(matchId, resG1, resG2) {
 // SEED: WORLD CUP 2026 MATCHES
 // ============================================================
 
-const SEED_GROUPS = {
-    A: { teams: ['ארצות הברית', 'מרוקו', 'יפן', 'הונדורס'],
-         dates: ['2026-06-11', '2026-06-20', '2026-07-01'] },
-    B: { teams: ['מקסיקו', 'קולומביה', 'קוריאה הדרומית', 'תוניסיה'],
-         dates: ['2026-06-11', '2026-06-20', '2026-07-01'] },
-    C: { teams: ['קנדה', 'אקוודור', 'קרואטיה', 'ניגריה'],
-         dates: ['2026-06-12', '2026-06-21', '2026-07-02'] },
-    D: { teams: ['צרפת', 'ברזיל', 'שווייץ', 'ניו זילנד'],
-         dates: ['2026-06-12', '2026-06-21', '2026-07-02'] },
-    E: { teams: ['ספרד', 'ארגנטינה', 'דנמרק', 'אוסטרליה'],
-         dates: ['2026-06-13', '2026-06-22', '2026-07-03'] },
-    F: { teams: ['אנגליה', 'אורוגוואי', 'טורקיה', 'חוף השנהב'],
-         dates: ['2026-06-13', '2026-06-22', '2026-07-03'] },
-    G: { teams: ['גרמניה', 'פורטוגל', 'ערב הסעודית', 'ונצואלה'],
-         dates: ['2026-06-14', '2026-06-23', '2026-07-04'] },
-    H: { teams: ['הולנד', 'איטליה', 'ירדן', 'פנמה'],
-         dates: ['2026-06-14', '2026-06-23', '2026-07-04'] },
-    I: { teams: ['סרביה', 'מצרים', 'איראן', 'קוסטה ריקה'],
-         dates: ['2026-06-15', '2026-06-24', '2026-07-05'] },
-    J: { teams: ['אוסטריה', 'סנגל', 'אוזבקיסטן', 'פרגוואי'],
-         dates: ['2026-06-15', '2026-06-24', '2026-07-05'] },
-    K: { teams: ['סקוטלנד', 'קמרון', 'עיראק', 'בוליביה'],
-         dates: ['2026-06-16', '2026-06-25', '2026-07-06'] },
-    L: { teams: ['רומניה', "אלג'יריה", 'דרום אפריקה', 'הונגריה'],
-         dates: ['2026-06-16', '2026-06-25', '2026-07-06'] },
-};
+const SEED_MATCHES = [
+    // GROUP A: מקסיקו, דרום אפריקה, קוריאה הדרומית, צ'כיה
+    { team1:'מקסיקו', team2:'דרום אפריקה', date:'2026-06-11T19:00', stage:'group', group:'A' },
+    { team1:"קוריאה הדרומית", team2:"צ'כיה", date:'2026-06-12T02:00', stage:'group', group:'A' },
+    { team1:'מקסיקו', team2:'קוריאה הדרומית', date:'2026-06-19T01:00', stage:'group', group:'A' },
+    { team1:'דרום אפריקה', team2:"צ'כיה", date:'2026-06-18T16:00', stage:'group', group:'A' },
+    { team1:'מקסיקו', team2:"צ'כיה", date:'2026-06-25T01:00', stage:'group', group:'A' },
+    { team1:'דרום אפריקה', team2:'קוריאה הדרומית', date:'2026-06-25T01:00', stage:'group', group:'A' },
 
-// Pair index (A,B share same day) → time slots
-// Groups at index 0,2,4,6,8,10 (A,C,E,G,I,K) use 15:00/18:00
-// Groups at index 1,3,5,7,9,11 (B,D,F,H,J,L) use 18:00/21:00
-function groupTimeSlot(groupName) {
-    const even = 'ACEGIK'.includes(groupName);
-    return even ? ['15:00', '18:00'] : ['18:00', '21:00'];
-}
+    // GROUP B: קנדה, שווייץ, קטאר, בוסניה והרצגובינה
+    { team1:'קנדה', team2:'בוסניה והרצגובינה', date:'2026-06-12T19:00', stage:'group', group:'B' },
+    { team1:'שווייץ', team2:'קטאר', date:'2026-06-12T22:00', stage:'group', group:'B' },
+    { team1:'קנדה', team2:'קטאר', date:'2026-06-18T22:00', stage:'group', group:'B' },
+    { team1:'שווייץ', team2:'בוסניה והרצגובינה', date:'2026-06-18T19:00', stage:'group', group:'B' },
+    { team1:'שווייץ', team2:'קנדה', date:'2026-06-25T19:00', stage:'group', group:'B' },
+    { team1:'בוסניה והרצגובינה', team2:'קטאר', date:'2026-06-25T19:00', stage:'group', group:'B' },
 
-function buildGroupMatchesForSeed(groupName, teams, dates) {
-    const [t1, t2, t3, t4] = teams;
-    const [d1, d2, d3]     = dates;
-    const [h1, h2]          = groupTimeSlot(groupName);
+    // GROUP C: ברזיל, מרוקו, האיטי, סקוטלנד
+    { team1:'ברזיל', team2:'מרוקו', date:'2026-06-13T22:00', stage:'group', group:'C' },
+    { team1:'האיטי', team2:'סקוטלנד', date:'2026-06-14T01:00', stage:'group', group:'C' },
+    { team1:'סקוטלנד', team2:'מרוקו', date:'2026-06-19T22:00', stage:'group', group:'C' },
+    { team1:'ברזיל', team2:'האיטי', date:'2026-06-20T01:00', stage:'group', group:'C' },
+    { team1:'סקוטלנד', team2:'ברזיל', date:'2026-06-24T22:00', stage:'group', group:'C' },
+    { team1:'מרוקו', team2:'האיטי', date:'2026-06-24T22:00', stage:'group', group:'C' },
 
-    return [
-        // Round 1
-        { team1: t1, team2: t2, date: `${d1}T${h1}`, stage: 'group', group: groupName, status: 'upcoming', result: null },
-        { team1: t3, team2: t4, date: `${d1}T${h2}`, stage: 'group', group: groupName, status: 'upcoming', result: null },
-        // Round 2
-        { team1: t1, team2: t3, date: `${d2}T${h1}`, stage: 'group', group: groupName, status: 'upcoming', result: null },
-        { team1: t2, team2: t4, date: `${d2}T${h2}`, stage: 'group', group: groupName, status: 'upcoming', result: null },
-        // Round 3 (simultaneous within group)
-        { team1: t1, team2: t4, date: `${d3}T21:00`, stage: 'group', group: groupName, status: 'upcoming', result: null },
-        { team1: t2, team2: t3, date: `${d3}T21:00`, stage: 'group', group: groupName, status: 'upcoming', result: null },
-    ];
-}
+    // GROUP D: ארצות הברית, פרגוואי, אוסטרליה, טורקיה
+    { team1:'ארצות הברית', team2:'פרגוואי', date:'2026-06-13T01:00', stage:'group', group:'D' },
+    { team1:'אוסטרליה', team2:'טורקיה', date:'2026-06-13T04:00', stage:'group', group:'D' },
+    { team1:'ארצות הברית', team2:'אוסטרליה', date:'2026-06-19T19:00', stage:'group', group:'D' },
+    { team1:'טורקיה', team2:'פרגוואי', date:'2026-06-20T04:00', stage:'group', group:'D' },
+    { team1:'טורקיה', team2:'ארצות הברית', date:'2026-06-26T02:00', stage:'group', group:'D' },
+    { team1:'פרגוואי', team2:'אוסטרליה', date:'2026-06-26T02:00', stage:'group', group:'D' },
+
+    // GROUP E: גרמניה, קוראסאו, חוף השנהב, אקוודור
+    { team1:'גרמניה', team2:'קוראסאו', date:'2026-06-14T17:00', stage:'group', group:'E' },
+    { team1:"חוף השנהב", team2:'אקוודור', date:'2026-06-14T23:00', stage:'group', group:'E' },
+    { team1:'גרמניה', team2:"חוף השנהב", date:'2026-06-20T20:00', stage:'group', group:'E' },
+    { team1:'אקוודור', team2:'קוראסאו', date:'2026-06-21T00:00', stage:'group', group:'E' },
+    { team1:'אקוודור', team2:'גרמניה', date:'2026-06-26T20:00', stage:'group', group:'E' },
+    { team1:'קוראסאו', team2:"חוף השנהב", date:'2026-06-26T20:00', stage:'group', group:'E' },
+
+    // GROUP F: הולנד, יפן, תוניסיה, שוודיה
+    { team1:'הולנד', team2:'יפן', date:'2026-06-14T20:00', stage:'group', group:'F' },
+    { team1:'שוודיה', team2:'תוניסיה', date:'2026-06-15T02:00', stage:'group', group:'F' },
+    { team1:'הולנד', team2:'שוודיה', date:'2026-06-20T17:00', stage:'group', group:'F' },
+    { team1:'תוניסיה', team2:'יפן', date:'2026-06-21T04:00', stage:'group', group:'F' },
+    { team1:'הולנד', team2:'תוניסיה', date:'2026-06-27T00:00', stage:'group', group:'F' },
+    { team1:'שוודיה', team2:'יפן', date:'2026-06-27T00:00', stage:'group', group:'F' },
+
+    // GROUP G: בלגיה, מצרים, איראן, ניו זילנד
+    { team1:'בלגיה', team2:'מצרים', date:'2026-06-15T22:00', stage:'group', group:'G' },
+    { team1:'איראן', team2:'ניו זילנד', date:'2026-06-16T04:00', stage:'group', group:'G' },
+    { team1:'בלגיה', team2:'איראן', date:'2026-06-21T19:00', stage:'group', group:'G' },
+    { team1:'ניו זילנד', team2:'מצרים', date:'2026-06-22T01:00', stage:'group', group:'G' },
+    { team1:'בלגיה', team2:'ניו זילנד', date:'2026-06-27T02:00', stage:'group', group:'G' },
+    { team1:'מצרים', team2:'איראן', date:'2026-06-27T02:00', stage:'group', group:'G' },
+
+    // GROUP H: ספרד, קאבו ורדה, ערב הסעודית, אורוגוואי
+    { team1:'ספרד', team2:'קאבו ורדה', date:'2026-06-15T17:00', stage:'group', group:'H' },
+    { team1:'ערב הסעודית', team2:'אורוגוואי', date:'2026-06-15T22:00', stage:'group', group:'H' },
+    { team1:'ספרד', team2:'ערב הסעודית', date:'2026-06-21T16:00', stage:'group', group:'H' },
+    { team1:'אורוגוואי', team2:'קאבו ורדה', date:'2026-06-21T22:00', stage:'group', group:'H' },
+    { team1:'ספרד', team2:'אורוגוואי', date:'2026-06-26T22:00', stage:'group', group:'H' },
+    { team1:'קאבו ורדה', team2:'ערב הסעודית', date:'2026-06-26T22:00', stage:'group', group:'H' },
+
+    // GROUP I: צרפת, סנגל, נורווגיה, עיראק
+    { team1:'צרפת', team2:'סנגל', date:'2026-06-16T19:00', stage:'group', group:'I' },
+    { team1:'עיראק', team2:'נורווגיה', date:'2026-06-16T22:00', stage:'group', group:'I' },
+    { team1:'צרפת', team2:'עיראק', date:'2026-06-22T21:00', stage:'group', group:'I' },
+    { team1:'נורווגיה', team2:'סנגל', date:'2026-06-23T00:00', stage:'group', group:'I' },
+    { team1:'צרפת', team2:'נורווגיה', date:'2026-06-27T19:00', stage:'group', group:'I' },
+    { team1:'סנגל', team2:'עיראק', date:'2026-06-27T19:00', stage:'group', group:'I' },
+
+    // GROUP J: ארגנטינה, אלג'יריה, אוסטריה, ירדן
+    { team1:'ארגנטינה', team2:"אלג'יריה", date:'2026-06-17T01:00', stage:'group', group:'J' },
+    { team1:'אוסטריה', team2:'ירדן', date:'2026-06-17T04:00', stage:'group', group:'J' },
+    { team1:'ארגנטינה', team2:'אוסטריה', date:'2026-06-21T17:00', stage:'group', group:'J' },
+    { team1:"אלג'יריה", team2:'ירדן', date:'2026-06-21T23:00', stage:'group', group:'J' },
+    { team1:'ארגנטינה', team2:'ירדן', date:'2026-06-27T22:00', stage:'group', group:'J' },
+    { team1:"אלג'יריה", team2:'אוסטריה', date:'2026-06-27T22:00', stage:'group', group:'J' },
+
+    // GROUP K: פורטוגל, אוזבקיסטן, קולומביה, קונגו DR
+    { team1:'פורטוגל', team2:"קונגו DR", date:'2026-06-17T17:00', stage:'group', group:'K' },
+    { team1:'אוזבקיסטן', team2:'קולומביה', date:'2026-06-18T02:00', stage:'group', group:'K' },
+    { team1:'פורטוגל', team2:'אוזבקיסטן', date:'2026-06-23T17:00', stage:'group', group:'K' },
+    { team1:'קולומביה', team2:"קונגו DR", date:'2026-06-23T20:00', stage:'group', group:'K' },
+    { team1:'פורטוגל', team2:'קולומביה', date:'2026-06-28T01:00', stage:'group', group:'K' },
+    { team1:'אוזבקיסטן', team2:"קונגו DR", date:'2026-06-28T01:00', stage:'group', group:'K' },
+
+    // GROUP L: אנגליה, קרואטיה, גאנה, פנמה
+    { team1:'אנגליה', team2:'קרואטיה', date:'2026-06-17T20:00', stage:'group', group:'L' },
+    { team1:'גאנה', team2:'פנמה', date:'2026-06-17T23:00', stage:'group', group:'L' },
+    { team1:'אנגליה', team2:'גאנה', date:'2026-06-23T22:00', stage:'group', group:'L' },
+    { team1:'קרואטיה', team2:'פנמה', date:'2026-06-24T01:00', stage:'group', group:'L' },
+    { team1:'אנגליה', team2:'פנמה', date:'2026-06-28T04:00', stage:'group', group:'L' },
+    { team1:'קרואטיה', team2:'גאנה', date:'2026-06-28T04:00', stage:'group', group:'L' },
+];
 
 async function adminSeedMatches() {
     if (!db) { alert('Firebase לא מחובר'); return; }
@@ -847,16 +900,14 @@ async function adminSeedMatches() {
     }
 
     let total = 0;
-    for (const [groupName, { teams, dates }] of Object.entries(SEED_GROUPS)) {
-        const groupMatches = buildGroupMatchesForSeed(groupName, teams, dates);
-        for (const m of groupMatches) {
-            await ref('matches').push(m);
-            total++;
-        }
+    for (const m of SEED_MATCHES) {
+        await ref('matches').push({ ...m, status: 'upcoming', result: null });
+        total++;
     }
 
     alert(`נטענו ${total} משחקי שלב הבתים בהצלחה! ✅\nמשחקי שלב הנוקאאוט יתווספו לאחר שתוצאות הבתים ייקבעו.`);
 }
+
 
 // ============================================================
 // HELPERS

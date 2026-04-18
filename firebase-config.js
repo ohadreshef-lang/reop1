@@ -16,13 +16,13 @@
 //    }
 
 const firebaseConfig = {
-    apiKey: "AIzaSyAxE0_b23h9EBOd-BOhszpAU8f8b8Bm6JQ",
-    authDomain: "blameme-b9f66.firebaseapp.com",
-    databaseURL: "https://blameme-b9f66-default-rtdb.firebaseio.com",
-    projectId: "blameme-b9f66",
-    storageBucket: "blameme-b9f66.firebasestorage.app",
-    messagingSenderId: "369836750399",
-    appId: "1:369836750399:web:a866bcc343b4ad50186a8a"
+    apiKey: "AIzaSyCJkXJh0su5o8ISQEUQru6-LI1iYDymWPk",
+    authDomain: "worldcup2026-dd327.firebaseapp.com",
+    databaseURL: "https://worldcup2026-dd327-default-rtdb.firebaseio.com",
+    projectId: "worldcup2026-dd327",
+    storageBucket: "worldcup2026-dd327.firebasestorage.app",
+    messagingSenderId: "755135382778",
+    appId: "1:755135382778:web:4d4ecad50b371794497543"
 };
 
 // Initialize Firebase
