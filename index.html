@@ -3,174 +3,229 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>מי אשם בנפילת הדמוקרטיה?</title>
-
-    <!-- Primary Meta Tags -->
-    <meta name="title" content="מי אשם בנפילת הדמוקרטיה בישראל?">
-    <meta name="description" content="חלקו 100% אשמה בין הגורמים השונים - סקר אינטראקטיבי שמאפשר לכם להביע את דעתכם">
-
-    <!-- Open Graph / Facebook -->
-    <meta property="og:type" content="website">
-    <meta property="og:title" content="מי אשם בנפילת הדמוקרטיה בישראל? 🗳️">
-    <meta property="og:description" content="חלקו 100% אשמה בין הגורמים השונים - הצביעו עכשיו וראו מה אחרים חושבים!">
-    <meta property="og:image" content="social-preview.png">
-
-    <!-- Twitter -->
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="מי אשם בנפילת הדמוקרטיה בישראל? 🗳️">
-    <meta name="twitter:description" content="חלקו 100% אשמה בין הגורמים השונים - הצביעו עכשיו וראו מה אחרים חושבים!">
-    <meta name="twitter:image" content="social-preview.png">
-
-    <!-- WhatsApp -->
-    <meta property="og:site_name" content="סקר האשמה">
-
+    <title>הימורי מונדיאל 2026 ⚽</title>
+    <meta property="og:title" content="הימורי מונדיאל 2026">
+    <meta property="og:description" content="נחש את התוצאות, תתחרה עם החברים!">
     <link rel="stylesheet" href="styles.css">
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <script src="firebase-config.js"></script>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1 id="mainTitle">מי אשם בנפילת הדמוקרטיה בישראל?</h1>
-            <p id="mainSubtitle" class="subtitle">חלקו 100% אחריות בין הגורמים השונים</p>
+
+    <!-- ===== LOGIN SCREEN ===== -->
+    <section id="login-screen">
+        <div class="login-card">
+            <div class="login-logo">⚽</div>
+            <h1>הימורי מונדיאל 2026</h1>
+            <p class="login-subtitle">נחש תוצאות, צבור נקודות, תתחרה עם החברים!</p>
+            <form id="login-form" novalidate>
+                <div class="field-group">
+                    <label for="input-name">שם מלא</label>
+                    <input type="text" id="input-name" placeholder="הכנס את שמך..." autocomplete="name" required>
+                </div>
+                <div class="field-group">
+                    <label for="input-email">אימייל</label>
+                    <input type="email" id="input-email" placeholder="your@email.com" autocomplete="email" required>
+                </div>
+                <p id="login-error" class="error-msg hidden"></p>
+                <button type="submit" class="btn btn-primary btn-block">כניסה / הרשמה</button>
+            </form>
+            <p class="login-hint">אם נרשמת בעבר עם אותו אימייל – תחזור לפרופיל שלך</p>
+        </div>
+    </section>
+
+    <!-- ===== MAIN APP ===== -->
+    <section id="main-app" class="hidden">
+        <header class="app-bar">
+            <div class="app-bar-title">⚽ מונדיאל 2026</div>
+            <div class="app-bar-user">
+                <span id="header-username"></span>
+                <button id="btn-logout" class="btn-text">יציאה</button>
+            </div>
         </header>
 
-        <!-- Entrance Screen -->
-        <section id="entrancePanel" class="panel entrance-panel">
-            <h2>הזדהות</h2>
-            <p class="entrance-subtitle">אנא הזינו את הפרטים שלכם כדי להצביע</p>
-            <form id="entranceForm" class="entrance-form">
-                <div class="form-group">
-                    <label for="userName">שם מלא</label>
-                    <input type="text" id="userName" placeholder="הזינו את שמכם..." required>
-                </div>
-                <div class="form-group">
-                    <label for="userEmail">כתובת אימייל</label>
-                    <input type="email" id="userEmail" placeholder="example@email.com" required>
-                    <span id="emailError" class="error-message hidden"></span>
-                </div>
-                <button type="submit" id="enterBtn" class="btn-primary btn-large">כניסה להצבעה</button>
-            </form>
-            <div id="alreadyVotedMessage" class="already-voted hidden">
-                <p>כתובת האימייל הזו כבר הצביעה.</p>
-                <p>ניתן להצביע פעם אחת בלבד.</p>
-            </div>
-        </section>
+        <nav class="tab-bar">
+            <button class="tab-btn active" data-tab="matches">
+                <span class="tab-icon">🏟️</span>משחקים
+            </button>
+            <button class="tab-btn" data-tab="leaderboard">
+                <span class="tab-icon">🏆</span>לידרבורד
+            </button>
+            <button class="tab-btn" data-tab="my-bets">
+                <span class="tab-icon">🎯</span>ההימורים שלי
+            </button>
+        </nav>
 
-        <!-- Main App Container (hidden until login) -->
-        <div id="mainApp" class="hidden">
-            <!-- Admin Mode Toggle (only visible in admin mode) -->
-            <nav id="modeToggle" class="mode-toggle hidden">
-                <button id="userModeBtn" class="mode-btn active">מצב משתמש</button>
-                <button id="adminModeBtn" class="mode-btn">מצב מנהל</button>
-            </nav>
-
-            <!-- Admin Panel -->
-        <section id="adminPanel" class="panel hidden">
-            <h2>ניהול כותרות</h2>
-            <div class="admin-controls title-controls">
-                <div class="form-group">
-                    <label for="editMainTitle">כותרת ראשית</label>
-                    <input type="text" id="editMainTitle" placeholder="כותרת ראשית...">
+        <main class="app-content">
+            <!-- MATCHES TAB -->
+            <div id="tab-matches" class="tab-panel active">
+                <div class="stage-filter" id="stage-filter">
+                    <button class="filter-btn active" data-stage="all">הכל</button>
+                    <button class="filter-btn" data-stage="group">בתים</button>
+                    <button class="filter-btn" data-stage="R32">שלב 32</button>
+                    <button class="filter-btn" data-stage="R16">שמינייה</button>
+                    <button class="filter-btn" data-stage="QF">רבע גמר</button>
+                    <button class="filter-btn" data-stage="SF">חצי גמר</button>
+                    <button class="filter-btn" data-stage="Final">גמר</button>
                 </div>
-                <div class="form-group">
-                    <label for="editSubtitle">כותרת משנה</label>
-                    <input type="text" id="editSubtitle" placeholder="כותרת משנה...">
-                </div>
-                <button id="saveTitlesBtn" class="btn-primary">שמור כותרות</button>
-            </div>
-
-            <h2>ניהול אפשרויות</h2>
-            <div class="admin-controls">
-                <div class="add-option">
-                    <input type="text" id="newOptionInput" placeholder="הוסף גורם חדש...">
-                    <button id="addOptionBtn" class="btn-primary">הוסף</button>
-                </div>
-                <div id="optionsList" class="options-list">
-                    <!-- Options will be populated here -->
+                <div id="matches-container">
+                    <p class="state-msg">טוען משחקים...</p>
                 </div>
             </div>
-            <div class="admin-actions">
-                <button id="resetResultsBtn" class="btn-danger">אפס תוצאות</button>
-                <button id="exportDataBtn" class="btn-secondary">ייצא נתונים</button>
-            </div>
 
-            <h2>צפייה בהצבעות</h2>
-            <div id="individualVotesContainer" class="individual-votes-container">
-                <!-- Individual votes will be populated here -->
-            </div>
-        </section>
-
-        <!-- User Panel -->
-        <section id="userPanel" class="panel">
-            <div id="noOptionsMessage" class="message hidden">
-                <p>אין אפשרויות זמינות. המתן למנהל להגדיר את האפשרויות.</p>
-            </div>
-            <div id="allocationForm" class="allocation-form">
-                <div id="sliderContainer" class="slider-container">
-                    <!-- Sliders will be populated here -->
+            <!-- LEADERBOARD TAB -->
+            <div id="tab-leaderboard" class="tab-panel">
+                <div class="leaderboard-header">
+                    <h2>🏆 טבלת דירוג</h2>
+                    <div class="scoring-legend">
+                        <span class="legend-item">תוצאה מדויקת = <strong>3 נק'</strong></span>
+                        <span class="legend-sep">|</span>
+                        <span class="legend-item">מנצח נכון = <strong>1 נק'</strong></span>
+                    </div>
                 </div>
-                <div class="total-display">
-                    <span>סה"כ:</span>
-                    <span id="totalPercentage" class="total-value">0%</span>
-                    <span id="totalStatus" class="total-status"></span>
+                <div id="leaderboard-container">
+                    <p class="state-msg">טוען...</p>
                 </div>
-                <button id="submitVoteBtn" class="btn-primary btn-large" disabled>שלח הצבעה</button>
             </div>
-        </section>
 
-        <!-- Results Panel -->
-        <section id="resultsPanel" class="panel">
-            <h2>תוצאות</h2>
-            <div id="resultsContainer" class="results-container">
-                <!-- Results will be populated here -->
+            <!-- MY BETS TAB -->
+            <div id="tab-my-bets" class="tab-panel">
+                <h2 class="my-bets-title">🎯 ההימורים שלי</h2>
+                <div id="my-bets-container">
+                    <p class="state-msg">טוען...</p>
+                </div>
             </div>
-            <p id="voteCount" class="vote-count"></p>
-        </section>
+        </main>
+    </section>
 
-            <!-- Thank You Message -->
-            <div id="thankYouMessage" class="thank-you hidden">
-                <h2>תודה על הצבעתך!</h2>
-                <p>הקולות נספרו</p>
+    <!-- ===== ADMIN PANEL ===== -->
+    <section id="admin-panel" class="hidden">
+        <header class="app-bar admin-bar">
+            <div class="app-bar-title">🔧 פאנל אדמין</div>
+            <button id="btn-admin-back" class="btn btn-secondary btn-sm">חזרה לאפליקציה</button>
+        </header>
 
-                <!-- Social Share Buttons -->
-                <div class="share-section">
-                    <p class="share-title">שתפו עם חברים:</p>
-                    <div class="share-buttons">
-                        <button class="share-btn whatsapp" onclick="shareOnWhatsApp()" title="שתף בוואטסאפ">
-                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                        </button>
-                        <button class="share-btn facebook" onclick="shareOnFacebook()" title="שתף בפייסבוק">
-                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                        </button>
-                        <button class="share-btn twitter" onclick="shareOnTwitter()" title="שתף בטוויטר">
-                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-                        </button>
-                        <button class="share-btn telegram" onclick="shareOnTelegram()" title="שתף בטלגרם">
-                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
-                        </button>
-                        <button class="share-btn copy-link" onclick="copyShareLink()" title="העתק קישור">
-                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
-                            <span class="copy-feedback hidden">הועתק!</span>
-                        </button>
+        <div class="app-content">
+            <!-- Password Gate -->
+            <div id="admin-auth">
+                <div class="admin-auth-card">
+                    <h2>כניסת מנהל</h2>
+                    <div class="field-group">
+                        <label for="admin-password-input">סיסמת מנהל</label>
+                        <input type="password" id="admin-password-input" placeholder="סיסמה...">
+                    </div>
+                    <p id="admin-auth-error" class="error-msg hidden">סיסמה שגויה</p>
+                    <button id="btn-admin-login" class="btn btn-primary btn-block">כניסה</button>
+                    <p class="login-hint">סיסמה ברירת מחדל: admin2026</p>
+                </div>
+            </div>
+
+            <!-- Admin Content (shown after auth) -->
+            <div id="admin-content" style="display:none">
+
+                <!-- Add Match -->
+                <div class="admin-section">
+                    <h3>➕ הוסף משחק</h3>
+                    <div class="add-match-form">
+                        <div class="form-row">
+                            <input type="text" id="new-team1" placeholder="קבוצה 1 (למשל: ברזיל)">
+                            <span class="vs-label">vs</span>
+                            <input type="text" id="new-team2" placeholder="קבוצה 2 (למשל: ארגנטינה)">
+                        </div>
+                        <div class="form-row">
+                            <input type="datetime-local" id="new-date">
+                            <select id="new-stage">
+                                <option value="group">שלב הבתים</option>
+                                <option value="R32">שלב 32</option>
+                                <option value="R16">שמינייה</option>
+                                <option value="QF">רבע גמר</option>
+                                <option value="SF">חצי גמר</option>
+                                <option value="3rd">מקום שלישי</option>
+                                <option value="Final">גמר</option>
+                            </select>
+                            <input type="text" id="new-group-label" placeholder="בית (A–L, לשלב הבתים)">
+                        </div>
+                        <div class="form-row">
+                            <button id="btn-add-match" class="btn btn-primary">הוסף משחק</button>
+                            <button id="btn-seed-matches" class="btn btn-secondary">⚡ טען משחקי מונדיאל 2026</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Change Password -->
+                <div class="admin-section">
+                    <h3>🔑 שנה סיסמה</h3>
+                    <div class="form-row">
+                        <input type="password" id="new-password-input" placeholder="סיסמה חדשה">
+                        <button id="btn-change-password" class="btn btn-secondary">שמור</button>
+                    </div>
+                </div>
+
+                <!-- Matches Management -->
+                <div class="admin-section">
+                    <h3>📋 ניהול משחקים</h3>
+                    <div id="admin-matches-container">
+                        <p class="state-msg">טוען...</p>
                     </div>
                 </div>
             </div>
         </div>
+    </section>
+
+    <!-- ===== MODAL: Enter Result ===== -->
+    <div id="result-modal" class="modal-overlay hidden">
+        <div class="modal-card">
+            <h3>הזן תוצאת משחק</h3>
+            <p id="modal-match-title" class="modal-subtitle"></p>
+            <div class="result-form">
+                <div class="result-team">
+                    <span id="modal-team1-name" class="result-team-name"></span>
+                    <input type="number" id="modal-score1" min="0" max="30" value="0" class="score-big">
+                </div>
+                <span class="result-sep">–</span>
+                <div class="result-team">
+                    <input type="number" id="modal-score2" min="0" max="30" value="0" class="score-big">
+                    <span id="modal-team2-name" class="result-team-name"></span>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="btn-save-result" class="btn btn-primary">שמור ↦ חשב נקודות</button>
+                <button id="btn-cancel-result" class="btn btn-ghost">ביטול</button>
+            </div>
+        </div>
     </div>
 
-    <footer>
-        <p>אפליקציית הקצאת אשמה - 2026</p>
-    </footer>
-
-    <!-- Loading Overlay -->
-    <div id="loadingOverlay" class="loading-overlay">
-        <div class="loading-spinner"></div>
-        <p>טוען נתונים...</p>
+    <!-- ===== MODAL: Edit Match ===== -->
+    <div id="edit-modal" class="modal-overlay hidden">
+        <div class="modal-card">
+            <h3>ערוך משחק</h3>
+            <input type="hidden" id="edit-match-id">
+            <div class="form-row">
+                <input type="text" id="edit-team1" placeholder="קבוצה 1">
+                <span class="vs-label">vs</span>
+                <input type="text" id="edit-team2" placeholder="קבוצה 2">
+            </div>
+            <div class="form-row">
+                <input type="datetime-local" id="edit-date">
+                <select id="edit-stage">
+                    <option value="group">שלב הבתים</option>
+                    <option value="R32">שלב 32</option>
+                    <option value="R16">שמינייה</option>
+                    <option value="QF">רבע גמר</option>
+                    <option value="SF">חצי גמר</option>
+                    <option value="3rd">מקום שלישי</option>
+                    <option value="Final">גמר</option>
+                </select>
+                <input type="text" id="edit-group-label" placeholder="בית (A–L)">
+            </div>
+            <div class="modal-actions">
+                <button id="btn-save-edit" class="btn btn-primary">שמור שינויים</button>
+                <button id="btn-cancel-edit" class="btn btn-ghost">ביטול</button>
+            </div>
+        </div>
     </div>
 
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-    <script src="firebase-config.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

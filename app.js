@@ -1,867 +1,861 @@
-// Blame Allocation App
-// State management with Firebase (cloud) and localStorage (fallback)
+// ============================================================
+// WORLD CUP 2026 BETTING APP
+// ============================================================
 
-const APP_STORAGE_KEY = 'blameAllocationApp';
-const FIREBASE_DATA_PATH = 'blameAllocationApp';
+const FB_ROOT = 'worldcup2026';
 
-// Default titles
-const DEFAULT_TITLE = 'מי אשם בנפילת הדמוקרטיה בישראל?';
-const DEFAULT_SUBTITLE = 'חלקו 100% אחריות בין הגורמים השונים';
+// ---- Stage / flag helpers ----
 
-// Application State
-let state = {
-    options: [], // { id: string, name: string }
-    votes: [],   // { allocations: { [optionId]: number }, name: string, email: string }
-    votedEmails: [], // List of emails that have already voted
-    currentAllocations: {}, // Current user's allocation before submitting
-    currentUser: null, // { name: string, email: string }
-    title: DEFAULT_TITLE,
-    subtitle: DEFAULT_SUBTITLE
+const STAGE_LABELS = {
+    group: 'שלב הבתים',
+    R32:   'שלב 32',
+    R16:   'שמינייה',
+    QF:    'רבע גמר',
+    SF:    'חצי גמר',
+    '3rd': 'מקום שלישי',
+    Final: 'גמר',
 };
 
-// Loading overlay element
-let loadingOverlay = null;
+const STAGE_ORDER = ['group','R32','R16','QF','SF','3rd','Final'];
 
-// Check if admin mode via URL parameter
-function isAdminMode() {
-    const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get('admin') === 'true';
-}
-
-// DOM Elements
-const elements = {
-    // Entrance elements
-    entrancePanel: document.getElementById('entrancePanel'),
-    entranceForm: document.getElementById('entranceForm'),
-    userName: document.getElementById('userName'),
-    userEmail: document.getElementById('userEmail'),
-    emailError: document.getElementById('emailError'),
-    enterBtn: document.getElementById('enterBtn'),
-    alreadyVotedMessage: document.getElementById('alreadyVotedMessage'),
-    mainApp: document.getElementById('mainApp'),
-
-    // Mode toggle (admin only)
-    modeToggle: document.getElementById('modeToggle'),
-    userModeBtn: document.getElementById('userModeBtn'),
-    adminModeBtn: document.getElementById('adminModeBtn'),
-
-    // Panels
-    adminPanel: document.getElementById('adminPanel'),
-    userPanel: document.getElementById('userPanel'),
-    resultsPanel: document.getElementById('resultsPanel'),
-
-    // Admin elements
-    editMainTitle: document.getElementById('editMainTitle'),
-    editSubtitle: document.getElementById('editSubtitle'),
-    saveTitlesBtn: document.getElementById('saveTitlesBtn'),
-    mainTitle: document.getElementById('mainTitle'),
-    mainSubtitle: document.getElementById('mainSubtitle'),
-    newOptionInput: document.getElementById('newOptionInput'),
-    addOptionBtn: document.getElementById('addOptionBtn'),
-    optionsList: document.getElementById('optionsList'),
-    resetResultsBtn: document.getElementById('resetResultsBtn'),
-    exportDataBtn: document.getElementById('exportDataBtn'),
-    individualVotesContainer: document.getElementById('individualVotesContainer'),
-
-    // User elements
-    noOptionsMessage: document.getElementById('noOptionsMessage'),
-    allocationForm: document.getElementById('allocationForm'),
-    sliderContainer: document.getElementById('sliderContainer'),
-    totalPercentage: document.getElementById('totalPercentage'),
-    totalStatus: document.getElementById('totalStatus'),
-    submitVoteBtn: document.getElementById('submitVoteBtn'),
-
-    // Results elements
-    resultsContainer: document.getElementById('resultsContainer'),
-    voteCount: document.getElementById('voteCount'),
-
-    // Thank you message
-    thankYouMessage: document.getElementById('thankYouMessage'),
-    voteAgainBtn: document.getElementById('voteAgainBtn')
+const TEAM_FLAGS = {
+    'ארצות הברית':'🇺🇸','קנדה':'🇨🇦','מקסיקו':'🇲🇽',
+    'ברזיל':'🇧🇷','ארגנטינה':'🇦🇷','אורוגוואי':'🇺🇾',
+    'קולומביה':'🇨🇴','אקוודור':'🇪🇨','ונצואלה':'🇻🇪',
+    'פרגוואי':'🇵🇾','בוליביה':'🇧🇴','צ\'ילה':'🇨🇱',
+    'צרפת':'🇫🇷','ספרד':'🇪🇸','גרמניה':'🇩🇪',
+    'אנגליה':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','פורטוגל':'🇵🇹','הולנד':'🇳🇱',
+    'איטליה':'🇮🇹','בלגיה':'🇧🇪','שווייץ':'🇨🇭',
+    'קרואטיה':'🇭🇷','סרביה':'🇷🇸','דנמרק':'🇩🇰',
+    'אוסטריה':'🇦🇹','סקוטלנד':'🏴󠁧󠁢󠁳󠁣󠁴󠁿','טורקיה':'🇹🇷',
+    'רומניה':'🇷🇴','הונגריה':'🇭🇺','פולין':'🇵🇱',
+    'מרוקו':'🇲🇦','סנגל':'🇸🇳','ניגריה':'🇳🇬',
+    'מצרים':'🇪🇬','קמרון':'🇨🇲',"חוף השנהב":'🇨🇮',
+    "אלג'יריה":'🇩🇿','תוניסיה':'🇹🇳','דרום אפריקה':'🇿🇦',
+    'יפן':'🇯🇵','קוריאה הדרומית':'🇰🇷','איראן':'🇮🇷',
+    'ערב הסעודית':'🇸🇦','אוסטרליה':'🇦🇺','עיראק':'🇮🇶',
+    'ירדן':'🇯🇴','אוזבקיסטן':'🇺🇿','ניו זילנד':'🇳🇿',
+    'הונדורס':'🇭🇳','פנמה':'🇵🇦','קוסטה ריקה':'🇨🇷',
 };
 
-// Initialize the application
-async function init() {
-    loadingOverlay = document.getElementById('loadingOverlay');
-
-    try {
-        await loadState();
-    } catch (e) {
-        console.error('Error loading state:', e);
-    }
-
-    setupEventListeners();
-    render();
-
-    // Check if admin mode
-    if (isAdminMode()) {
-        initAdminMode();
-    } else {
-        initUserMode();
-    }
-
-    // Hide loading overlay
-    hideLoading();
-
-    // Setup real-time listener for Firebase
-    if (typeof firebaseEnabled !== 'undefined' && firebaseEnabled && db) {
-        setupFirebaseListener();
-    }
+function getFlag(name) {
+    return TEAM_FLAGS[name] || '🏳️';
 }
 
-// Show loading overlay
-function showLoading() {
-    if (loadingOverlay) {
-        loadingOverlay.classList.remove('hidden');
-    }
+// ---- Scoring ----
+
+function getOutcome(g1, g2) {
+    if (g1 > g2) return 'win1';
+    if (g1 < g2) return 'win2';
+    return 'draw';
 }
 
-// Hide loading overlay
-function hideLoading() {
-    if (loadingOverlay) {
-        loadingOverlay.classList.add('hidden');
-    }
+function calcPoints(betGoals1, betGoals2, resGoals1, resGoals2) {
+    if (betGoals1 === resGoals1 && betGoals2 === resGoals2) return 3;
+    if (getOutcome(betGoals1, betGoals2) === getOutcome(resGoals1, resGoals2)) return 1;
+    return 0;
 }
 
-// Setup Firebase real-time listener
-function setupFirebaseListener() {
-    db.ref(FIREBASE_DATA_PATH).on('value', (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            state.options = data.options || [];
-            state.votes = data.votes || [];
-            state.votedEmails = data.votedEmails || [];
-            state.title = data.title || DEFAULT_TITLE;
-            state.subtitle = data.subtitle || DEFAULT_SUBTITLE;
+// ---- App State ----
 
-            // Re-initialize current allocations
-            resetCurrentAllocations();
-            updateTitlesDisplay();
-            render();
+let currentUser = null; // { userId, name, email }
+let matches      = {};  // matchId → match object
+let userBets     = {};  // matchId → bet object (current user)
+let allUsers     = [];  // sorted by totalPoints desc
+let activeTab    = 'matches';
+let stageFilter  = 'all';
+let isAdminMode  = false;
+let isAdminAuthed = false;
+let pendingResultMatchId = null;
+let pendingEditMatchId   = null;
 
-            // Re-populate admin fields if in admin mode
-            if (isAdminMode()) {
-                elements.editMainTitle.value = state.title;
-                elements.editSubtitle.value = state.subtitle;
-            }
-        }
+// ---- Firebase refs ----
+
+function ref(path) {
+    return db.ref(`${FB_ROOT}/${path}`);
+}
+
+// ---- Utilities ----
+
+function emailToId(email) {
+    return email.toLowerCase().replace(/[.#$[\]/]/g, '_');
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleString('he-IL', {
+        weekday: 'short', day: 'numeric', month: 'numeric',
+        hour: '2-digit', minute: '2-digit'
     });
 }
 
-// Initialize admin mode - skip entrance, show admin controls
-function initAdminMode() {
-    elements.entrancePanel.classList.add('hidden');
-    elements.mainApp.classList.remove('hidden');
-    elements.modeToggle.classList.remove('hidden');
-    elements.adminPanel.classList.remove('hidden');
-    elements.userPanel.classList.add('hidden');
-    elements.adminModeBtn.classList.add('active');
-    elements.userModeBtn.classList.remove('active');
-
-    // Populate title edit fields with current values
-    elements.editMainTitle.value = state.title;
-    elements.editSubtitle.value = state.subtitle;
+function matchIsLocked(match) {
+    return new Date(match.date) <= new Date();
 }
 
-// Initialize user mode - show entrance, hide admin controls
-function initUserMode() {
-    elements.entrancePanel.classList.remove('hidden');
-    elements.mainApp.classList.add('hidden');
-    elements.modeToggle.classList.add('hidden');
-    elements.adminPanel.classList.add('hidden');
-}
+function $ (id) { return document.getElementById(id); }
 
-// Load state from Firebase or localStorage
-async function loadState() {
-    // Try Firebase first
-    if (typeof firebaseEnabled !== 'undefined' && firebaseEnabled && db) {
-        try {
-            const snapshot = await db.ref(FIREBASE_DATA_PATH).once('value');
-            const data = snapshot.val();
-            if (data) {
-                state.options = data.options || [];
-                state.votes = data.votes || [];
-                state.votedEmails = data.votedEmails || [];
-                state.title = data.title || DEFAULT_TITLE;
-                state.subtitle = data.subtitle || DEFAULT_SUBTITLE;
-                console.log('State loaded from Firebase');
-            }
-        } catch (e) {
-            console.error('Error loading from Firebase:', e);
-            loadFromLocalStorage();
-        }
+function show(id)  { const e=$(id); e.classList.remove('hidden'); e.style.display=''; }
+function hide(id)  { const e=$(id); e.classList.add('hidden'); }
+function showEl(el){ el.classList.remove('hidden'); el.style.display=''; }
+function hideEl(el){ el.classList.add('hidden'); }
+
+
+// ============================================================
+// INIT
+// ============================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    isAdminMode = new URLSearchParams(window.location.search).has('admin');
+
+    if (isAdminMode) {
+        show('admin-panel');
+        hide('login-screen');
+        hide('main-app');
+        setupAdminListeners();
     } else {
-        loadFromLocalStorage();
-    }
-
-    // Initialize current allocations
-    resetCurrentAllocations();
-
-    // Apply titles to header
-    updateTitlesDisplay();
-}
-
-// Load from localStorage (fallback)
-function loadFromLocalStorage() {
-    try {
-        const saved = localStorage.getItem(APP_STORAGE_KEY);
+        // Try auto-login from localStorage
+        const saved = localStorage.getItem('wc2026_user');
         if (saved) {
-            const parsed = JSON.parse(saved);
-            state.options = parsed.options || [];
-            state.votes = parsed.votes || [];
-            state.votedEmails = parsed.votedEmails || [];
-            state.title = parsed.title || DEFAULT_TITLE;
-            state.subtitle = parsed.subtitle || DEFAULT_SUBTITLE;
-            console.log('State loaded from localStorage');
+            try {
+                currentUser = JSON.parse(saved);
+                enterApp();
+            } catch(e) {
+                showLoginScreen();
+            }
+        } else {
+            showLoginScreen();
         }
-    } catch (e) {
-        console.error('Error loading from localStorage:', e);
-    }
-}
-
-// Save state to Firebase and localStorage
-function saveState() {
-    const dataToSave = {
-        options: state.options,
-        votes: state.votes,
-        votedEmails: state.votedEmails,
-        title: state.title,
-        subtitle: state.subtitle
-    };
-
-    // Save to Firebase if available
-    if (typeof firebaseEnabled !== 'undefined' && firebaseEnabled && db) {
-        db.ref(FIREBASE_DATA_PATH).set(dataToSave)
-            .then(() => console.log('State saved to Firebase'))
-            .catch((e) => console.error('Error saving to Firebase:', e));
     }
 
-    // Always save to localStorage as backup
-    try {
-        localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(dataToSave));
-    } catch (e) {
-        console.error('Error saving to localStorage:', e);
-    }
-}
+    // Global UI listeners
+    $('login-form').addEventListener('submit', handleLogin);
+    $('btn-logout').addEventListener('click', handleLogout);
 
-// Update titles display in header and meta tags
-function updateTitlesDisplay() {
-    elements.mainTitle.textContent = state.title;
-    elements.mainSubtitle.textContent = state.subtitle;
-    document.title = state.title;
-
-    // Update social media meta tags
-    updateMetaTag('meta[property="og:title"]', state.title);
-    updateMetaTag('meta[property="og:description"]', state.subtitle);
-    updateMetaTag('meta[name="twitter:title"]', state.title);
-    updateMetaTag('meta[name="twitter:description"]', state.subtitle);
-    updateMetaTag('meta[name="title"]', state.title);
-    updateMetaTag('meta[name="description"]', state.subtitle);
-}
-
-// Helper to update meta tags
-function updateMetaTag(selector, content) {
-    const meta = document.querySelector(selector);
-    if (meta) {
-        meta.setAttribute('content', content);
-    }
-}
-
-// Save titles (admin)
-function saveTitles() {
-    const newTitle = elements.editMainTitle.value.trim();
-    const newSubtitle = elements.editSubtitle.value.trim();
-
-    if (newTitle) {
-        state.title = newTitle;
-    }
-    if (newSubtitle) {
-        state.subtitle = newSubtitle;
-    }
-
-    saveState();
-    updateTitlesDisplay();
-}
-
-// Reset current allocations to zero
-function resetCurrentAllocations() {
-    state.currentAllocations = {};
-    state.options.forEach(option => {
-        state.currentAllocations[option.id] = 0;
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
-}
 
-// Generate unique ID
-function generateId() {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2);
-}
-
-// Setup event listeners
-function setupEventListeners() {
-    // Entrance form
-    elements.entranceForm.addEventListener('submit', handleEntranceSubmit);
-    elements.userEmail.addEventListener('input', clearEmailError);
-
-    // Mode toggle
-    elements.userModeBtn.addEventListener('click', () => switchMode('user'));
-    elements.adminModeBtn.addEventListener('click', () => switchMode('admin'));
-
-    // Admin actions - titles
-    elements.saveTitlesBtn.addEventListener('click', saveTitles);
-
-    // Admin actions - options
-    elements.addOptionBtn.addEventListener('click', addOption);
-    elements.newOptionInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') addOption();
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => setStageFilter(btn.dataset.stage));
     });
-    elements.resetResultsBtn.addEventListener('click', resetResults);
-    elements.exportDataBtn.addEventListener('click', exportData);
 
-    // User actions
-    elements.submitVoteBtn.addEventListener('click', submitVote);
+    // Modal cancel buttons
+    $('btn-cancel-result').addEventListener('click', () => hide('result-modal'));
+    $('btn-cancel-edit').addEventListener('click',   () => hide('edit-modal'));
+    $('btn-save-result').addEventListener('click', saveResult);
+    $('btn-save-edit').addEventListener('click', saveEditMatch);
+
+    // Admin back
+    $('btn-admin-back').addEventListener('click', () => {
+        window.location.href = window.location.pathname;
+    });
+});
+
+function showLoginScreen() {
+    show('login-screen');
+    hide('main-app');
+    hide('admin-panel');
 }
 
-// Validate email format
-function isValidEmail(email) {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+function enterApp() {
+    hide('login-screen');
+    show('main-app');
+    $('header-username').textContent = currentUser.name;
+    startFirebaseListeners();
+    renderCurrentTab();
 }
 
-// Check if email has already voted
-function hasAlreadyVoted(email) {
-    const normalizedEmail = email.toLowerCase().trim();
-    return state.votedEmails.includes(normalizedEmail);
-}
+// ============================================================
+// AUTH
+// ============================================================
 
-// Clear email error message
-function clearEmailError() {
-    elements.emailError.classList.add('hidden');
-    elements.emailError.textContent = '';
-    elements.userEmail.classList.remove('error');
-    elements.alreadyVotedMessage.classList.add('hidden');
-    elements.entranceForm.classList.remove('hidden');
-}
-
-// Handle entrance form submission
-function handleEntranceSubmit(e) {
+async function handleLogin(e) {
     e.preventDefault();
+    const name  = $('input-name').value.trim();
+    const email = $('input-email').value.trim().toLowerCase();
+    const errEl = $('login-error');
+    hideEl(errEl);
 
-    const name = elements.userName.value.trim();
-    const email = elements.userEmail.value.trim();
-
-    // Validate email format
-    if (!isValidEmail(email)) {
-        elements.emailError.textContent = 'אנא הזינו כתובת אימייל תקינה';
-        elements.emailError.classList.remove('hidden');
-        elements.userEmail.classList.add('error');
+    if (!name || !email) {
+        errEl.textContent = 'נא למלא שם ואימייל';
+        showEl(errEl);
         return;
     }
 
-    // Check if email has already voted
-    if (hasAlreadyVoted(email)) {
-        elements.entranceForm.classList.add('hidden');
-        elements.alreadyVotedMessage.classList.remove('hidden');
-        return;
+    const userId = emailToId(email);
+    currentUser = { userId, name, email };
+    localStorage.setItem('wc2026_user', JSON.stringify(currentUser));
+
+    if (db) {
+        // Create or update user in Firebase (preserve existing points)
+        const snap = await ref(`users/${userId}`).once('value');
+        if (!snap.exists()) {
+            await ref(`users/${userId}`).set({ name, email, totalPoints: 0 });
+        } else {
+            // Update name in case it changed
+            await ref(`users/${userId}/name`).set(name);
+        }
     }
 
-    // Store current user and proceed to voting
-    state.currentUser = {
-        name: name,
-        email: email.toLowerCase().trim()
-    };
-
-    // Show main app
-    elements.entrancePanel.classList.add('hidden');
-    elements.mainApp.classList.remove('hidden');
+    enterApp();
 }
 
-// Switch between user and admin mode (admin only)
-function switchMode(mode) {
-    if (!isAdminMode()) return; // Only allow mode switch in admin mode
-
-    if (mode === 'user') {
-        elements.userModeBtn.classList.add('active');
-        elements.adminModeBtn.classList.remove('active');
-        elements.adminPanel.classList.add('hidden');
-        elements.userPanel.classList.remove('hidden');
-    } else {
-        elements.adminModeBtn.classList.add('active');
-        elements.userModeBtn.classList.remove('active');
-        elements.userPanel.classList.add('hidden');
-        elements.adminPanel.classList.remove('hidden');
+function handleLogout() {
+    if (db) {
+        ref('matches').off();
+        ref('users').off();
+        if (currentUser) ref(`bets/${currentUser.userId}`).off();
     }
+    currentUser = null;
+    localStorage.removeItem('wc2026_user');
+    matches  = {};
+    userBets = {};
+    allUsers = [];
+    showLoginScreen();
 }
 
-// Add new option (admin)
-function addOption() {
-    const name = elements.newOptionInput.value.trim();
-    if (!name) return;
+// ============================================================
+// FIREBASE LISTENERS
+// ============================================================
 
-    const option = {
-        id: generateId(),
-        name: name
-    };
+function startFirebaseListeners() {
+    if (!db) return;
 
-    state.options.push(option);
-    state.currentAllocations[option.id] = 0;
-    elements.newOptionInput.value = '';
-
-    saveState();
-    render();
-}
-
-// Delete option (admin)
-function deleteOption(id) {
-    if (!confirm('האם למחוק אפשרות זו?')) return;
-
-    state.options = state.options.filter(o => o.id !== id);
-    delete state.currentAllocations[id];
-
-    // Remove from existing votes
-    state.votes.forEach(vote => {
-        delete vote.allocations[id];
+    // Matches
+    ref('matches').on('value', snap => {
+        matches = snap.val() || {};
+        if (activeTab === 'matches') renderMatches();
+        if (activeTab === 'my-bets') renderMyBets();
     });
 
-    saveState();
-    render();
-}
+    // All users (leaderboard)
+    ref('users').on('value', snap => {
+        const raw = snap.val() || {};
+        allUsers = Object.entries(raw)
+            .map(([id, u]) => ({ userId: id, ...u }))
+            .sort((a, b) => (b.totalPoints || 0) - (a.totalPoints || 0));
+        if (activeTab === 'leaderboard') renderLeaderboard();
+    });
 
-// Update option name (admin)
-function updateOptionName(id, newName) {
-    const option = state.options.find(o => o.id === id);
-    if (option) {
-        option.name = newName.trim();
-        saveState();
-    }
-}
-
-// Reset all results (admin)
-function resetResults() {
-    if (!confirm('האם לאפס את כל התוצאות? פעולה זו לא ניתנת לביטול.')) return;
-
-    state.votes = [];
-    saveState();
-    renderResults();
-}
-
-// Export data (admin)
-function exportData() {
-    const data = {
-        options: state.options,
-        votes: state.votes,
-        results: calculateResults(),
-        exportDate: new Date().toISOString()
-    };
-
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `blame-allocation-export-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-}
-
-// Update allocation from slider with auto-balancing
-function updateAllocation(id, value) {
-    const newValue = parseInt(value) || 0;
-    const oldValue = state.currentAllocations[id] || 0;
-    const difference = newValue - oldValue;
-
-    // Set the new value for the changed slider
-    state.currentAllocations[id] = newValue;
-
-    // Calculate total of OTHER sliders (excluding the one being changed)
-    const otherIds = Object.keys(state.currentAllocations).filter(key => key !== id);
-    const otherTotal = otherIds.reduce((sum, key) => sum + state.currentAllocations[key], 0);
-
-    // Calculate total after change
-    const total = newValue + otherTotal;
-
-    // If total exceeds 100%, reduce other sliders proportionally
-    if (total > 100 && otherTotal > 0) {
-        const excess = total - 100;
-        const reductionRatio = Math.min(excess / otherTotal, 1);
-
-        otherIds.forEach(otherId => {
-            const currentVal = state.currentAllocations[otherId];
-            const reduction = Math.round(currentVal * reductionRatio);
-            state.currentAllocations[otherId] = Math.max(0, currentVal - reduction);
+    // Current user's bets
+    if (currentUser) {
+        ref(`bets/${currentUser.userId}`).on('value', snap => {
+            userBets = snap.val() || {};
+            if (activeTab === 'matches')  renderMatches();
+            if (activeTab === 'my-bets') renderMyBets();
         });
+    }
+}
 
-        // Fix rounding errors - ensure total is exactly 100
-        const newTotal = Object.values(state.currentAllocations).reduce((sum, val) => sum + val, 0);
-        if (newTotal > 100) {
-            // Find the largest other slider and reduce it
-            const largestOther = otherIds.reduce((max, key) =>
-                state.currentAllocations[key] > state.currentAllocations[max] ? key : max
-            , otherIds[0]);
-            if (largestOther) {
-                state.currentAllocations[largestOther] -= (newTotal - 100);
-                state.currentAllocations[largestOther] = Math.max(0, state.currentAllocations[largestOther]);
-            }
-        }
+// ============================================================
+// TAB NAVIGATION
+// ============================================================
 
-        // Update all slider displays and inputs
-        updateAllSliders();
+function switchTab(tab) {
+    activeTab = tab;
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.tab === tab);
+    });
+    document.querySelectorAll('.tab-panel').forEach(p => {
+        p.classList.toggle('active', p.id === `tab-${tab}`);
+        p.style.display = p.id === `tab-${tab}` ? 'block' : 'none';
+    });
+    renderCurrentTab();
+}
+
+function renderCurrentTab() {
+    if (activeTab === 'matches')     renderMatches();
+    else if (activeTab === 'leaderboard') renderLeaderboard();
+    else if (activeTab === 'my-bets')     renderMyBets();
+}
+
+function setStageFilter(stage) {
+    stageFilter = stage;
+    document.querySelectorAll('.filter-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.stage === stage);
+    });
+    renderMatches();
+}
+
+
+// ============================================================
+// RENDER: MATCHES TAB
+// ============================================================
+
+function renderMatches() {
+    const container = $('matches-container');
+
+    const matchList = Object.entries(matches)
+        .map(([id, m]) => ({ id, ...m }))
+        .filter(m => stageFilter === 'all' || m.stage === stageFilter)
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    if (matchList.length === 0) {
+        container.innerHTML = '<p class="state-msg">אין משחקים להצגה. האדמין יכול לטעון את המשחקים.</p>';
+        return;
+    }
+
+    // Group by stage → then by group label (for group stage)
+    const grouped = {};
+    matchList.forEach(m => {
+        const key = m.stage === 'group' ? `group_${m.group || ''}` : m.stage;
+        if (!grouped[key]) grouped[key] = { stage: m.stage, group: m.group, items: [] };
+        grouped[key].items.push(m);
+    });
+
+    // Sort groups by stage order, then by group letter
+    const sortedKeys = Object.keys(grouped).sort((a, b) => {
+        const sa = STAGE_ORDER.indexOf(grouped[a].stage);
+        const sb = STAGE_ORDER.indexOf(grouped[b].stage);
+        if (sa !== sb) return sa - sb;
+        return (grouped[a].group || '').localeCompare(grouped[b].group || '');
+    });
+
+    let html = '';
+    sortedKeys.forEach(key => {
+        const g = grouped[key];
+        const label = g.stage === 'group'
+            ? `${STAGE_LABELS.group} – בית ${g.group || ''}`
+            : STAGE_LABELS[g.stage] || g.stage;
+        html += `<div class="stage-group-header">${label}</div>`;
+        g.items.forEach(m => { html += buildMatchCard(m); });
+    });
+
+    container.innerHTML = html;
+
+    // Attach bet-save listeners
+    container.querySelectorAll('.btn-save-bet').forEach(btn => {
+        btn.addEventListener('click', () => saveBet(btn.dataset.matchId));
+    });
+    container.querySelectorAll('.bet-edit-link').forEach(btn => {
+        btn.addEventListener('click', () => unlockBetEdit(btn.dataset.matchId));
+    });
+}
+
+function buildMatchCard(m) {
+    const locked = matchIsLocked(m);
+    const bet    = userBets[m.id];
+    const hasResult = m.result !== null && m.result !== undefined;
+
+    // Status badge
+    let badgeClass, badgeText;
+    if (hasResult) {
+        badgeClass = 'badge-completed'; badgeText = 'הסתיים';
+    } else if (locked) {
+        badgeClass = 'badge-locked'; badgeText = 'נעול';
     } else {
-        updateSliderDisplay(id, newValue);
+        badgeClass = 'badge-upcoming'; badgeText = 'עתידי';
     }
 
-    updateTotalDisplay();
-}
-
-// Update all sliders UI to match state
-function updateAllSliders() {
-    Object.entries(state.currentAllocations).forEach(([id, value]) => {
-        updateSliderDisplay(id, value);
-        // Update the actual slider input
-        const slider = document.querySelector(`input[type="range"][oninput*="${id}"]`);
-        if (slider) {
-            slider.value = value;
+    // Middle content
+    let middleHtml = '';
+    if (hasResult) {
+        middleHtml = `<div class="result-score">${m.result.team1Goals} – ${m.result.team2Goals}</div>`;
+    } else if (locked) {
+        if (bet) {
+            middleHtml = `
+                <div class="my-bet-label">ניחוש שלך</div>
+                <div class="my-bet-score">${bet.team1Goals} – ${bet.team2Goals}</div>
+                <div class="bet-locked-msg">🔒 נעול</div>`;
+        } else {
+            middleHtml = `<div class="bet-locked-msg">🔒 לא הימרת</div>`;
         }
-    });
-}
-
-// Update total display
-function updateTotalDisplay() {
-    const total = Object.values(state.currentAllocations).reduce((sum, val) => sum + val, 0);
-
-    elements.totalPercentage.textContent = total + '%';
-
-    if (total === 100) {
-        elements.totalPercentage.className = 'total-value valid';
-        elements.totalStatus.textContent = '✓';
-        elements.totalStatus.className = 'total-status valid';
-        elements.submitVoteBtn.disabled = false;
-    } else if (total > 100) {
-        elements.totalPercentage.className = 'total-value invalid';
-        elements.totalStatus.textContent = `(${total - 100}% עודף)`;
-        elements.totalStatus.className = 'total-status invalid';
-        elements.submitVoteBtn.disabled = true;
     } else {
-        elements.totalPercentage.className = 'total-value invalid';
-        elements.totalStatus.textContent = `(חסרים ${100 - total}%)`;
-        elements.totalStatus.className = 'total-status invalid';
-        elements.submitVoteBtn.disabled = true;
-    }
-}
-
-// Update slider display value
-function updateSliderDisplay(id, value) {
-    const valueDisplay = document.querySelector(`[data-value-for="${id}"]`);
-    if (valueDisplay) {
-        valueDisplay.textContent = value + '%';
-    }
-}
-
-// Submit vote
-function submitVote() {
-    const total = Object.values(state.currentAllocations).reduce((sum, val) => sum + val, 0);
-    if (total !== 100) return;
-    if (!state.currentUser) return;
-
-    // Add vote with user info
-    state.votes.push({
-        allocations: { ...state.currentAllocations },
-        name: state.currentUser.name,
-        email: state.currentUser.email,
-        timestamp: new Date().toISOString()
-    });
-
-    // Mark email as voted
-    state.votedEmails.push(state.currentUser.email);
-
-    saveState();
-
-    // Show thank you message
-    elements.userPanel.classList.add('hidden');
-    elements.thankYouMessage.classList.remove('hidden');
-
-    renderResults();
-}
-
-// Calculate aggregated results
-function calculateResults() {
-    if (state.votes.length === 0 || state.options.length === 0) {
-        return [];
-    }
-
-    const totals = {};
-    state.options.forEach(option => {
-        totals[option.id] = 0;
-    });
-
-    state.votes.forEach(vote => {
-        Object.entries(vote.allocations).forEach(([id, value]) => {
-            if (totals.hasOwnProperty(id)) {
-                totals[id] += value;
-            }
-        });
-    });
-
-    const voteCount = state.votes.length;
-    const results = state.options.map(option => ({
-        id: option.id,
-        name: option.name,
-        average: voteCount > 0 ? (totals[option.id] / voteCount).toFixed(1) : 0
-    }));
-
-    // Sort by average descending
-    results.sort((a, b) => parseFloat(b.average) - parseFloat(a.average));
-
-    return results;
-}
-
-// Render functions
-function render() {
-    renderOptions();
-    renderSliders();
-    renderResults();
-    updateTotalDisplay();
-
-    // Render individual votes for admin
-    if (isAdminMode()) {
-        renderIndividualVotes();
-    }
-}
-
-// Render admin options list
-function renderOptions() {
-    elements.optionsList.innerHTML = '';
-
-    state.options.forEach(option => {
-        const item = document.createElement('div');
-        item.className = 'option-item';
-        item.innerHTML = `
-            <input type="text" value="${escapeHtml(option.name)}"
-                   onchange="updateOptionName('${option.id}', this.value)"
-                   onblur="updateOptionName('${option.id}', this.value)">
-            <button class="delete-btn" onclick="deleteOption('${option.id}')" title="מחק">×</button>
-        `;
-        elements.optionsList.appendChild(item);
-    });
-}
-
-// Shuffle array (Fisher-Yates algorithm)
-function shuffleArray(array) {
-    const shuffled = [...array];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-}
-
-// Render user sliders
-function renderSliders() {
-    if (state.options.length === 0) {
-        elements.noOptionsMessage.classList.remove('hidden');
-        elements.allocationForm.classList.add('hidden');
-        return;
-    }
-
-    elements.noOptionsMessage.classList.add('hidden');
-    elements.allocationForm.classList.remove('hidden');
-
-    elements.sliderContainer.innerHTML = '';
-
-    // Shuffle options for regular users, keep original order for admin
-    const displayOptions = isAdminMode() ? state.options : shuffleArray(state.options);
-
-    displayOptions.forEach(option => {
-        const value = state.currentAllocations[option.id] || 0;
-        const item = document.createElement('div');
-        item.className = 'slider-item';
-        item.innerHTML = `
-            <div class="slider-header">
-                <span class="slider-label">${escapeHtml(option.name)}</span>
-                <span class="slider-value" data-value-for="${option.id}">${value}%</span>
-            </div>
-            <div class="slider-wrapper">
-                <input type="range" min="0" max="100" value="${value}"
-                       oninput="updateAllocation('${option.id}', this.value)">
-            </div>
-        `;
-        elements.sliderContainer.appendChild(item);
-    });
-}
-
-// Render results
-function renderResults() {
-    const results = calculateResults();
-
-    if (results.length === 0 || state.votes.length === 0) {
-        elements.resultsContainer.innerHTML = '<p class="message">אין תוצאות עדיין</p>';
-        elements.voteCount.textContent = '';
-        return;
-    }
-
-    elements.resultsContainer.innerHTML = '';
-
-    results.forEach(result => {
-        const item = document.createElement('div');
-        item.className = 'result-item';
-        item.innerHTML = `
-            <div class="result-header">
-                <span class="result-label">${escapeHtml(result.name)}</span>
-                <span class="result-percentage">${result.average}%</span>
-            </div>
-            <div class="result-bar-container">
-                <div class="result-bar" style="width: ${result.average}%"></div>
-            </div>
-        `;
-        elements.resultsContainer.appendChild(item);
-    });
-
-    elements.voteCount.textContent = `סה"כ ${state.votes.length} הצבעות`;
-}
-
-// Render individual votes (admin only)
-function renderIndividualVotes() {
-    if (!elements.individualVotesContainer) return;
-
-    if (state.votes.length === 0) {
-        elements.individualVotesContainer.innerHTML = '<p class="no-votes-message">אין הצבעות עדיין</p>';
-        return;
-    }
-
-    elements.individualVotesContainer.innerHTML = '';
-
-    // Create option name lookup
-    const optionNames = {};
-    state.options.forEach(opt => {
-        optionNames[opt.id] = opt.name;
-    });
-
-    // Sort votes by timestamp (newest first)
-    const sortedVotes = [...state.votes].sort((a, b) => {
-        return new Date(b.timestamp) - new Date(a.timestamp);
-    });
-
-    sortedVotes.forEach((vote, index) => {
-        const card = document.createElement('div');
-        card.className = 'vote-card';
-
-        // Format timestamp
-        let timeStr = '';
-        if (vote.timestamp) {
-            const date = new Date(vote.timestamp);
-            timeStr = date.toLocaleDateString('he-IL') + ' ' + date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
-        }
-
-        // Build allocations HTML
-        let allocationsHtml = '';
-        Object.entries(vote.allocations).forEach(([optionId, value]) => {
-            const optionName = optionNames[optionId] || 'אפשרות שנמחקה';
-            const zeroClass = value === 0 ? 'zero' : '';
-            allocationsHtml += `
-                <div class="vote-allocation-item">
-                    <span class="vote-allocation-name">${escapeHtml(optionName)}</span>
-                    <span class="vote-allocation-value ${zeroClass}">${value}%</span>
+        // Show bet form (or saved bet with edit option)
+        if (bet && !bet._editing) {
+            middleHtml = `
+                <div class="my-bet-label">ניחוש שלך</div>
+                <div class="my-bet-score">${bet.team1Goals} – ${bet.team2Goals}</div>
+                <button class="bet-edit-link" data-match-id="${m.id}">ערוך</button>`;
+        } else {
+            const v1 = bet ? bet.team1Goals : 0;
+            const v2 = bet ? bet.team2Goals : 0;
+            middleHtml = `
+                <div class="bet-inputs">
+                    <input type="number" class="bet-score-input" id="bet1-${m.id}" min="0" max="30" value="${v1}">
+                    <span class="bet-sep">–</span>
+                    <input type="number" class="bet-score-input" id="bet2-${m.id}" min="0" max="30" value="${v2}">
                 </div>
-            `;
-        });
+                <button class="btn-save-bet" data-match-id="${m.id}">💾 שמור</button>`;
+        }
+    }
 
-        card.innerHTML = `
-            <div class="vote-card-header">
-                <div class="vote-card-user">
-                    <span class="vote-card-name">${escapeHtml(vote.name || 'אנונימי')}</span>
-                    <span class="vote-card-email">${escapeHtml(vote.email || '')}</span>
+    // Points row (only if match completed and user had a bet)
+    let pointsHtml = '';
+    if (hasResult && bet && bet.points !== null && bet.points !== undefined) {
+        const pts = bet.points;
+        const cls = pts === 3 ? 'points-3' : pts === 1 ? 'points-1' : 'points-0';
+        const emoji = pts === 3 ? '🎯' : pts === 1 ? '✅' : '❌';
+        pointsHtml = `<div class="match-points-row ${cls}">${emoji} ניחוש: ${bet.team1Goals}–${bet.team2Goals} | ${pts} נקודות</div>`;
+    } else if (hasResult && !bet) {
+        pointsHtml = `<div class="match-points-row points-na">לא הימרת על משחק זה</div>`;
+    }
+
+    return `
+    <div class="match-card" id="card-${m.id}">
+        <div class="match-card-header">
+            <span class="match-date-str">${formatDate(m.date)}</span>
+            <span class="match-status-badge ${badgeClass}">${badgeText}</span>
+        </div>
+        <div class="match-card-body">
+            <div class="match-teams-row">
+                <div class="match-team">
+                    <span class="team-flag">${getFlag(m.team1)}</span>
+                    <span class="team-name">${m.team1}</span>
                 </div>
-                <span class="vote-card-time">${timeStr}</span>
+                <div class="match-middle">${middleHtml}</div>
+                <div class="match-team">
+                    <span class="team-flag">${getFlag(m.team2)}</span>
+                    <span class="team-name">${m.team2}</span>
+                </div>
             </div>
-            <div class="vote-card-allocations">
-                ${allocationsHtml}
-            </div>
-        `;
+            ${pointsHtml}
+        </div>
+    </div>`;
+}
 
-        elements.individualVotesContainer.appendChild(card);
+// ============================================================
+// BET ACTIONS
+// ============================================================
+
+async function saveBet(matchId) {
+    if (!currentUser || !db) return;
+    const m = matches[matchId];
+    if (!m || matchIsLocked(m)) return;
+
+    const g1 = parseInt($(`bet1-${matchId}`).value, 10);
+    const g2 = parseInt($(`bet2-${matchId}`).value, 10);
+
+    if (isNaN(g1) || isNaN(g2) || g1 < 0 || g2 < 0) return;
+
+    await ref(`bets/${currentUser.userId}/${matchId}`).set({
+        team1Goals: g1,
+        team2Goals: g2,
+        placedAt:   Date.now(),
+        points:     null,
+    });
+
+    // Remove _editing flag so saved state shows
+    if (userBets[matchId]) delete userBets[matchId]._editing;
+}
+
+function unlockBetEdit(matchId) {
+    if (!userBets[matchId]) return;
+    userBets[matchId]._editing = true;
+    renderMatches();
+}
+
+
+// ============================================================
+// RENDER: LEADERBOARD
+// ============================================================
+
+function renderLeaderboard() {
+    const container = $('leaderboard-container');
+
+    if (allUsers.length === 0) {
+        container.innerHTML = '<p class="state-msg">אין משתתפים עדיין.</p>';
+        return;
+    }
+
+    let html = '<div class="leaderboard-table">';
+    allUsers.forEach((u, i) => {
+        const rank    = i + 1;
+        const isMe    = currentUser && u.userId === currentUser.userId;
+        const medal   = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `${rank}.`;
+        const meTag   = isMe ? '<span class="lb-me-tag">אני</span>' : '';
+        html += `
+        <div class="leaderboard-row ${isMe ? 'is-me' : ''}">
+            <span class="lb-rank">${medal}</span>
+            <span class="lb-name">${escapeHtml(u.name)} ${meTag}</span>
+            <span class="lb-points">${u.totalPoints || 0} <span class="lb-pts-label">נק'</span></span>
+        </div>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+// ============================================================
+// RENDER: MY BETS
+// ============================================================
+
+function renderMyBets() {
+    const container = $('my-bets-container');
+    if (!currentUser) return;
+
+    const betEntries = Object.entries(userBets).filter(([, b]) => !b._editing);
+    if (betEntries.length === 0) {
+        container.innerHTML = '<p class="state-msg">עוד לא הימרת על אף משחק.</p>';
+        return;
+    }
+
+    // Sort by match date
+    const sorted = betEntries
+        .map(([matchId, bet]) => ({ matchId, bet, match: matches[matchId] }))
+        .filter(x => x.match)
+        .sort((a, b) => new Date(a.match.date) - new Date(b.match.date));
+
+    let html = '';
+    sorted.forEach(({ matchId, bet, match: m }) => {
+        const hasResult = m.result !== null && m.result !== undefined;
+        const pts = bet.points;
+
+        let ptsBadge = '';
+        if (hasResult && pts !== null && pts !== undefined) {
+            const cls = pts === 3 ? 'points-3' : pts === 1 ? 'points-1' : 'points-0';
+            ptsBadge = `<span class="match-points-row ${cls}" style="display:inline-block;padding:2px 10px;">${pts} נק'</span>`;
+        }
+
+        const resultStr = hasResult
+            ? `<div class="my-bet-col">
+                 <span class="my-bet-col-label">תוצאה</span>
+                 <span class="my-bet-col-value result-val">${m.result.team1Goals}–${m.result.team2Goals}</span>
+               </div>`
+            : '';
+
+        const stageLabel = m.stage === 'group'
+            ? `בית ${m.group || ''}`
+            : (STAGE_LABELS[m.stage] || m.stage);
+
+        html += `
+        <div class="my-bet-card">
+            <div class="my-bet-match-info">
+                <span class="my-bet-teams">${getFlag(m.team1)} ${escapeHtml(m.team1)} vs ${escapeHtml(m.team2)} ${getFlag(m.team2)}</span>
+                <span class="my-bet-date">${stageLabel} · ${formatDate(m.date)}</span>
+            </div>
+            <div class="my-bet-scores-row">
+                <div class="my-bet-col">
+                    <span class="my-bet-col-label">הניחוש שלי</span>
+                    <span class="my-bet-col-value">${bet.team1Goals}–${bet.team2Goals}</span>
+                </div>
+                ${resultStr}
+                ${ptsBadge ? `<div class="my-bet-col">${ptsBadge}</div>` : ''}
+            </div>
+        </div>`;
+    });
+
+    container.innerHTML = html;
+}
+
+// ============================================================
+// ADMIN: SETUP LISTENERS
+// ============================================================
+
+function setupAdminListeners() {
+    $('btn-admin-login').addEventListener('click', attemptAdminLogin);
+    $('admin-password-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter') attemptAdminLogin();
+    });
+    $('btn-add-match').addEventListener('click', adminAddMatch);
+    $('btn-seed-matches').addEventListener('click', adminSeedMatches);
+    $('btn-change-password').addEventListener('click', adminChangePassword);
+}
+
+async function attemptAdminLogin() {
+    const pwd = $('admin-password-input').value;
+    const errEl = $('admin-auth-error');
+    hideEl(errEl);
+
+    let storedPwd = 'admin2026';
+    if (db) {
+        const snap = await ref('settings/adminPassword').once('value');
+        if (snap.exists()) storedPwd = snap.val();
+    }
+
+    if (pwd === storedPwd) {
+        isAdminAuthed = true;
+        hide('admin-auth');
+        show('admin-content');
+        loadAdminMatches();
+    } else {
+        showEl(errEl);
+    }
+}
+
+async function adminChangePassword() {
+    const newPwd = $('new-password-input').value.trim();
+    if (!newPwd || newPwd.length < 4) { alert('סיסמה חייבת להכיל לפחות 4 תווים'); return; }
+    if (db) await ref('settings/adminPassword').set(newPwd);
+    $('new-password-input').value = '';
+    alert('הסיסמה שונתה בהצלחה!');
+}
+
+// ============================================================
+// ADMIN: MATCHES MANAGEMENT
+// ============================================================
+
+async function adminAddMatch() {
+    const t1    = $('new-team1').value.trim();
+    const t2    = $('new-team2').value.trim();
+    const date  = $('new-date').value;
+    const stage = $('new-stage').value;
+    const grp   = $('new-group-label').value.trim().toUpperCase();
+
+    if (!t1 || !t2 || !date) { alert('נא למלא קבוצה 1, קבוצה 2 ותאריך'); return; }
+
+    const matchData = {
+        team1: t1, team2: t2,
+        date, stage,
+        group:  stage === 'group' ? (grp || null) : null,
+        status: 'upcoming',
+        result: null,
+    };
+
+    if (db) {
+        await ref('matches').push(matchData);
+    }
+
+    // Reset form
+    ['new-team1','new-team2','new-date','new-group-label'].forEach(id => { $(id).value = ''; });
+    loadAdminMatches();
+}
+
+function loadAdminMatches() {
+    if (!db) return;
+    ref('matches').on('value', snap => {
+        const data = snap.val() || {};
+        renderAdminMatches(data);
     });
 }
 
-// Utility: Escape HTML
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+function renderAdminMatches(data) {
+    const container = $('admin-matches-container');
+    const list = Object.entries(data).sort((a, b) => new Date(a[1].date) - new Date(b[1].date));
+
+    if (list.length === 0) {
+        container.innerHTML = '<p class="state-msg">אין משחקים עדיין.</p>';
+        return;
+    }
+
+    let html = '';
+    list.forEach(([id, m]) => {
+        const stageLabel = m.stage === 'group'
+            ? `בית ${m.group || ''}`
+            : (STAGE_LABELS[m.stage] || m.stage);
+        const resultStr = m.result
+            ? `<span class="admin-result-badge">${m.result.team1Goals}–${m.result.team2Goals}</span>`
+            : '';
+
+        html += `
+        <div class="admin-match-row" id="admin-row-${id}">
+            <div class="admin-match-info">
+                <div class="admin-match-teams">${getFlag(m.team1)} ${escapeHtml(m.team1)} vs ${escapeHtml(m.team2)} ${getFlag(m.team2)} ${resultStr}</div>
+                <div class="admin-match-meta">${stageLabel} · ${formatDate(m.date)}</div>
+            </div>
+            <div class="admin-match-actions">
+                <button class="btn btn-secondary btn-sm" onclick="openEditModal('${id}')">ערוך</button>
+                <button class="btn btn-primary btn-sm" onclick="openResultModal('${id}')">הזן תוצאה</button>
+                <button class="btn btn-danger btn-sm" onclick="adminDeleteMatch('${id}')">מחק</button>
+            </div>
+        </div>`;
+    });
+
+    container.innerHTML = html;
 }
 
-// Social Media Sharing Functions
-function getShareUrl() {
-    // Remove admin parameter if present
-    const url = new URL(window.location.href);
-    url.searchParams.delete('admin');
-    return url.toString();
+async function adminDeleteMatch(matchId) {
+    if (!confirm('למחוק משחק זה?')) return;
+    if (db) await ref(`matches/${matchId}`).remove();
 }
 
-function getShareText() {
-    return `${state.title} - בואו להצביע גם אתם!`;
-}
+// ---- Edit Match Modal ----
 
-function shareOnWhatsApp() {
-    const url = encodeURIComponent(getShareUrl());
-    const text = encodeURIComponent(getShareText());
-    window.open(`https://wa.me/?text=${text}%20${url}`, '_blank');
-}
-
-function shareOnFacebook() {
-    const url = encodeURIComponent(getShareUrl());
-    window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank', 'width=600,height=400');
-}
-
-function shareOnTwitter() {
-    const url = encodeURIComponent(getShareUrl());
-    const text = encodeURIComponent(getShareText());
-    window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, '_blank', 'width=600,height=400');
-}
-
-function shareOnTelegram() {
-    const url = encodeURIComponent(getShareUrl());
-    const text = encodeURIComponent(getShareText());
-    window.open(`https://t.me/share/url?url=${url}&text=${text}`, '_blank');
-}
-
-function copyShareLink() {
-    const url = getShareUrl();
-    navigator.clipboard.writeText(url).then(() => {
-        // Show feedback
-        const feedback = document.querySelector('.copy-feedback');
-        if (feedback) {
-            feedback.classList.remove('hidden');
-            setTimeout(() => {
-                feedback.classList.add('hidden');
-            }, 2000);
-        }
-    }).catch(err => {
-        console.error('Failed to copy:', err);
-        // Fallback for older browsers
-        const textArea = document.createElement('textarea');
-        textArea.value = url;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-
-        const feedback = document.querySelector('.copy-feedback');
-        if (feedback) {
-            feedback.classList.remove('hidden');
-            setTimeout(() => {
-                feedback.classList.add('hidden');
-            }, 2000);
-        }
+function openEditModal(matchId) {
+    pendingEditMatchId = matchId;
+    ref(`matches/${matchId}`).once('value').then(snap => {
+        const m = snap.val();
+        if (!m) return;
+        $('edit-match-id').value = matchId;
+        $('edit-team1').value     = m.team1;
+        $('edit-team2').value     = m.team2;
+        $('edit-date').value      = m.date ? m.date.slice(0,16) : '';
+        $('edit-stage').value     = m.stage;
+        $('edit-group-label').value = m.group || '';
+        show('edit-modal');
     });
 }
 
-// Make functions available globally for inline handlers
-window.updateOptionName = updateOptionName;
-window.deleteOption = deleteOption;
-window.updateAllocation = updateAllocation;
-window.shareOnWhatsApp = shareOnWhatsApp;
-window.shareOnFacebook = shareOnFacebook;
-window.shareOnTwitter = shareOnTwitter;
-window.shareOnTelegram = shareOnTelegram;
-window.copyShareLink = copyShareLink;
+async function saveEditMatch() {
+    const matchId = $('edit-match-id').value;
+    const t1    = $('edit-team1').value.trim();
+    const t2    = $('edit-team2').value.trim();
+    const date  = $('edit-date').value;
+    const stage = $('edit-stage').value;
+    const grp   = $('edit-group-label').value.trim().toUpperCase();
 
-// Initialize on DOM ready
-document.addEventListener('DOMContentLoaded', init);
+    if (!t1 || !t2 || !date) { alert('נא למלא שדות חובה'); return; }
+
+    if (db) {
+        await ref(`matches/${matchId}`).update({
+            team1: t1, team2: t2, date, stage,
+            group: stage === 'group' ? (grp || null) : null,
+        });
+    }
+    hide('edit-modal');
+}
+
+// ---- Enter Result Modal ----
+
+function openResultModal(matchId) {
+    pendingResultMatchId = matchId;
+    ref(`matches/${matchId}`).once('value').then(snap => {
+        const m = snap.val();
+        if (!m) return;
+        $('modal-match-title').textContent = `${m.team1} vs ${m.team2}`;
+        $('modal-team1-name').textContent  = m.team1;
+        $('modal-team2-name').textContent  = m.team2;
+        $('modal-score1').value = m.result ? m.result.team1Goals : 0;
+        $('modal-score2').value = m.result ? m.result.team2Goals : 0;
+        show('result-modal');
+    });
+}
+
+async function saveResult() {
+    const matchId = pendingResultMatchId;
+    if (!matchId || !db) return;
+
+    const g1 = parseInt($('modal-score1').value, 10);
+    const g2 = parseInt($('modal-score2').value, 10);
+    if (isNaN(g1) || isNaN(g2)) return;
+
+    // Save result and mark completed
+    await ref(`matches/${matchId}`).update({
+        result: { team1Goals: g1, team2Goals: g2 },
+        status: 'completed',
+    });
+
+    hide('result-modal');
+
+    // Recalculate points for all users
+    await recalcPoints(matchId, g1, g2);
+    alert('תוצאה נשמרה! הנקודות חושבו מחדש.');
+}
+
+async function recalcPoints(matchId, resG1, resG2) {
+    if (!db) return;
+
+    // Get all bets for this match
+    const usersSnap = await ref('users').once('value');
+    const usersData = usersSnap.val() || {};
+
+    const updates = {};
+
+    for (const userId of Object.keys(usersData)) {
+        const betSnap = await ref(`bets/${userId}/${matchId}`).once('value');
+        if (!betSnap.exists()) continue;
+
+        const bet = betSnap.val();
+        const pts = calcPoints(bet.team1Goals, bet.team2Goals, resG1, resG2);
+
+        // Update this bet's points
+        updates[`bets/${userId}/${matchId}/points`] = pts;
+    }
+
+    // Apply all bet point updates
+    if (Object.keys(updates).length > 0) {
+        await db.ref(FB_ROOT).update(updates);
+    }
+
+    // Now recompute each user's total points
+    for (const userId of Object.keys(usersData)) {
+        const allBetsSnap = await ref(`bets/${userId}`).once('value');
+        const allBets = allBetsSnap.val() || {};
+        const total = Object.values(allBets)
+            .reduce((sum, b) => sum + (b.points || 0), 0);
+        await ref(`users/${userId}/totalPoints`).set(total);
+    }
+}
+
+
+// ============================================================
+// SEED: WORLD CUP 2026 MATCHES
+// ============================================================
+
+const SEED_GROUPS = {
+    A: { teams: ['ארצות הברית', 'מרוקו', 'יפן', 'הונדורס'],
+         dates: ['2026-06-11', '2026-06-20', '2026-07-01'] },
+    B: { teams: ['מקסיקו', 'קולומביה', 'קוריאה הדרומית', 'תוניסיה'],
+         dates: ['2026-06-11', '2026-06-20', '2026-07-01'] },
+    C: { teams: ['קנדה', 'אקוודור', 'קרואטיה', 'ניגריה'],
+         dates: ['2026-06-12', '2026-06-21', '2026-07-02'] },
+    D: { teams: ['צרפת', 'ברזיל', 'שווייץ', 'ניו זילנד'],
+         dates: ['2026-06-12', '2026-06-21', '2026-07-02'] },
+    E: { teams: ['ספרד', 'ארגנטינה', 'דנמרק', 'אוסטרליה'],
+         dates: ['2026-06-13', '2026-06-22', '2026-07-03'] },
+    F: { teams: ['אנגליה', 'אורוגוואי', 'טורקיה', 'חוף השנהב'],
+         dates: ['2026-06-13', '2026-06-22', '2026-07-03'] },
+    G: { teams: ['גרמניה', 'פורטוגל', 'ערב הסעודית', 'ונצואלה'],
+         dates: ['2026-06-14', '2026-06-23', '2026-07-04'] },
+    H: { teams: ['הולנד', 'איטליה', 'ירדן', 'פנמה'],
+         dates: ['2026-06-14', '2026-06-23', '2026-07-04'] },
+    I: { teams: ['סרביה', 'מצרים', 'איראן', 'קוסטה ריקה'],
+         dates: ['2026-06-15', '2026-06-24', '2026-07-05'] },
+    J: { teams: ['אוסטריה', 'סנגל', 'אוזבקיסטן', 'פרגוואי'],
+         dates: ['2026-06-15', '2026-06-24', '2026-07-05'] },
+    K: { teams: ['סקוטלנד', 'קמרון', 'עיראק', 'בוליביה'],
+         dates: ['2026-06-16', '2026-06-25', '2026-07-06'] },
+    L: { teams: ['רומניה', "אלג'יריה", 'דרום אפריקה', 'הונגריה'],
+         dates: ['2026-06-16', '2026-06-25', '2026-07-06'] },
+};
+
+// Pair index (A,B share same day) → time slots
+// Groups at index 0,2,4,6,8,10 (A,C,E,G,I,K) use 15:00/18:00
+// Groups at index 1,3,5,7,9,11 (B,D,F,H,J,L) use 18:00/21:00
+function groupTimeSlot(groupName) {
+    const even = 'ACEGIK'.includes(groupName);
+    return even ? ['15:00', '18:00'] : ['18:00', '21:00'];
+}
+
+function buildGroupMatchesForSeed(groupName, teams, dates) {
+    const [t1, t2, t3, t4] = teams;
+    const [d1, d2, d3]     = dates;
+    const [h1, h2]          = groupTimeSlot(groupName);
+
+    return [
+        // Round 1
+        { team1: t1, team2: t2, date: `${d1}T${h1}`, stage: 'group', group: groupName, status: 'upcoming', result: null },
+        { team1: t3, team2: t4, date: `${d1}T${h2}`, stage: 'group', group: groupName, status: 'upcoming', result: null },
+        // Round 2
+        { team1: t1, team2: t3, date: `${d2}T${h1}`, stage: 'group', group: groupName, status: 'upcoming', result: null },
+        { team1: t2, team2: t4, date: `${d2}T${h2}`, stage: 'group', group: groupName, status: 'upcoming', result: null },
+        // Round 3 (simultaneous within group)
+        { team1: t1, team2: t4, date: `${d3}T21:00`, stage: 'group', group: groupName, status: 'upcoming', result: null },
+        { team1: t2, team2: t3, date: `${d3}T21:00`, stage: 'group', group: groupName, status: 'upcoming', result: null },
+    ];
+}
+
+async function adminSeedMatches() {
+    if (!db) { alert('Firebase לא מחובר'); return; }
+
+    const snap = await ref('matches').once('value');
+    if (snap.exists() && Object.keys(snap.val()).length > 0) {
+        if (!confirm('כבר קיימים משחקים. להוסיף את משחקי שלב הבתים בנוסף?')) return;
+    }
+
+    let total = 0;
+    for (const [groupName, { teams, dates }] of Object.entries(SEED_GROUPS)) {
+        const groupMatches = buildGroupMatchesForSeed(groupName, teams, dates);
+        for (const m of groupMatches) {
+            await ref('matches').push(m);
+            total++;
+        }
+    }
+
+    alert(`נטענו ${total} משחקי שלב הבתים בהצלחה! ✅\nמשחקי שלב הנוקאאוט יתווספו לאחר שתוצאות הבתים ייקבעו.`);
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
