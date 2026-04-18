@@ -174,7 +174,7 @@ function enterApp() {
 // AUTH
 // ============================================================
 
-async function handleLogin(e) {
+function handleLogin(e) {
     e.preventDefault();
     const name  = $('input-name').value.trim();
     const email = $('input-email').value.trim().toLowerCase();
@@ -203,8 +203,7 @@ async function handleLogin(e) {
             .catch(err => console.warn('Firebase user sync failed:', err.message));
     }
 
-    // Reload so the init picks up the saved user — same path that already works
-    window.location.reload();
+    enterApp();
 }
 
 function handleLogout() {
