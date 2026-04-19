@@ -62,6 +62,26 @@ function getSortedParticipatingTeams() {
     );
 }
 
+// Golden-boot candidates (prefilled, not admin-managed)
+const TOP_SCORER_CANDIDATES = [
+    'Kylian Mbappé','Harry Kane','Erling Haaland','Vinícius Jr.',
+    'Lautaro Martínez','Lionel Messi','Bukayo Saka','Lamine Yamal',
+    'Ousmane Dembélé','Raphinha','Mikel Oyarzabal','Richarlison',
+    'João Pedro','Cole Palmer','Jamal Musiala','Florian Wirtz',
+    'Antoine Griezmann','Julián Álvarez','Rodrygo','Phil Foden',
+    'Cristiano Ronaldo','Bruno Fernandes','Rafael Leão','Gonçalo Ramos',
+    'Victor Osimhen','Mohamed Salah','Dušan Vlahović','Aleksandar Mitrović',
+    'Romelu Lukaku','Loïs Openda','Christian Pulisic','Santiago Giménez',
+    'Darwin Núñez','Federico Valverde','Cody Gakpo','Memphis Depay',
+    'Randal Kolo Muani','Kai Havertz','Leroy Sané','Khvicha Kvaratskhelia',
+];
+
+function getSortedScorerCandidates() {
+    return [...TOP_SCORER_CANDIDATES].sort((a, b) =>
+        a.localeCompare(b, currentLang)
+    );
+}
+
 // ---- Scoring ----
 
 function getOutcome(g1, g2) {
@@ -766,13 +786,10 @@ function renderTournament() {
     }
 
     const locked = tournamentIsLocked();
-    const { scorers, winner, topScorer } = tournamentSettings;
+    const { winner, topScorer } = tournamentSettings;
     const teams = getSortedParticipatingTeams();
+    const scorers = getSortedScorerCandidates();
     const finalSet = !!(winner || topScorer);
-
-    if (scorers.length === 0) {
-        // champion list is always available; only scorers depend on admin
-    }
 
     const myWinner    = (specialBets.winner && specialBets.winner.team) || '';
     const myScorer    = (specialBets.topScorer && specialBets.topScorer.player) || '';
@@ -903,7 +920,6 @@ function setupAdminListeners() {
     $('btn-add-match').addEventListener('click', adminAddMatch);
     $('btn-seed-matches').addEventListener('click', adminSeedMatches);
     $('btn-change-password').addEventListener('click', adminChangePassword);
-    $('btn-save-scorers-list').addEventListener('click', adminSaveScorersList);
     $('btn-save-tournament-result').addEventListener('click', adminSaveTournamentResult);
 }
 
@@ -1224,8 +1240,7 @@ async function loadAdminTournament() {
     const snap = await ref('settings/tournament').once('value');
     const ts = snap.val() || {};
     const teams   = getSortedParticipatingTeams();
-    const scorers = Object.values(ts.scorers || {});
-    $('admin-scorers-list').value = scorers.join('\n');
+    const scorers = getSortedScorerCandidates();
 
     const winnerSel = $('admin-final-winner');
     const scorerSel = $('admin-final-scorer');
@@ -1233,14 +1248,6 @@ async function loadAdminTournament() {
         teams.map(x => `<option value="${escapeHtml(x)}" ${ts.winner === x ? 'selected' : ''}>${escapeHtml(translateTeam(x))}</option>`).join('');
     scorerSel.innerHTML = `<option value="">${t('admin.finalScorerPlaceholder')}</option>` +
         scorers.map(x => `<option value="${escapeHtml(x)}" ${ts.topScorer === x ? 'selected' : ''}>${escapeHtml(x)}</option>`).join('');
-}
-
-async function adminSaveScorersList() {
-    if (!db) return;
-    const lines = $('admin-scorers-list').value.split('\n').map(s => s.trim()).filter(Boolean);
-    await ref('settings/tournament/scorers').set(lines);
-    await loadAdminTournament();
-    alert(t('admin.tournamentScorersSaved'));
 }
 
 async function adminSaveTournamentResult() {

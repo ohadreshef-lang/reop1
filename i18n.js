@@ -193,7 +193,7 @@ const TRANSLATIONS = {
         'admin.editUserEmpty': 'נא להזין שם',
 
         'admin.tournamentTitle': '🏆 ניחושי טורניר',
-        'admin.tournamentHint1': 'רשימת המועמדים למלך השערים. שורה = מועמד. רשימת האלופה מוגדרת אוטומטית מ-48 המשתתפות.',
+        'admin.tournamentHint1': 'רשימות האלופה ומלך השערים מוגדרות אוטומטית.',
         'admin.tournamentHint2': 'תוצאות סופיות (הזן רק בתום הטורניר — מחשב 10 נק\' לכל ניחוש נכון בכל קבוצה):',
         'admin.teamsLabel': 'מועמדות לאליפות',
         'admin.scorersLabel': 'מועמדים למלך השערים',
@@ -383,7 +383,7 @@ const TRANSLATIONS = {
         'admin.editUserEmpty': 'Please enter a name',
 
         'admin.tournamentTitle': '🏆 Tournament predictions',
-        'admin.tournamentHint1': 'Top-scorer candidate list. One per line. Champion list is auto-populated from the 48 participating teams.',
+        'admin.tournamentHint1': 'Champion and top-scorer lists are auto-populated.',
         'admin.tournamentHint2': 'Final results (enter only when tournament ends — awards 10 pts per correct prediction in each group):',
         'admin.teamsLabel': 'Champion candidates',
         'admin.scorersLabel': 'Top-scorer candidates',
@@ -572,7 +572,7 @@ const TRANSLATIONS = {
         'admin.editUserEmpty': 'Ingresa un nombre',
 
         'admin.tournamentTitle': '🏆 Predicciones del torneo',
-        'admin.tournamentHint1': 'Lista de candidatos a goleador. Uno por línea. La lista de campeón se genera de los 48 participantes.',
+        'admin.tournamentHint1': 'Las listas de campeón y goleador se generan automáticamente.',
         'admin.tournamentHint2': 'Resultados finales (solo al terminar el torneo — otorga 10 pts por predicción correcta en cada grupo):',
         'admin.teamsLabel': 'Candidatos a campeón',
         'admin.scorersLabel': 'Candidatos a goleador',
