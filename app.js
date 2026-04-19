@@ -40,6 +40,28 @@ function getFlag(name) {
     return TEAM_FLAGS[name] || '🏳️';
 }
 
+// All 48 teams participating in World Cup 2026 (Hebrew keys, canonical DB form)
+const PARTICIPATING_TEAMS = [
+    'מקסיקו','דרום אפריקה','קוריאה הדרומית',"צ'כיה",
+    'קנדה','בוסניה והרצגובינה','שווייץ','קטאר',
+    'ברזיל','מרוקו','האיטי','סקוטלנד',
+    'ארצות הברית','פרגוואי','אוסטרליה','טורקיה',
+    'גרמניה','קוראסאו','חוף השנהב','אקוודור',
+    'הולנד','יפן','שוודיה','תוניסיה',
+    'בלגיה','מצרים','איראן','ניו זילנד',
+    'ספרד','קאבו ורדה','ערב הסעודית','אורוגוואי',
+    'צרפת','סנגל','עיראק','נורווגיה',
+    'ארגנטינה',"אלג'יריה",'אוסטריה','ירדן',
+    'פורטוגל','קונגו DR','אוזבקיסטן','קולומביה',
+    'אנגליה','קרואטיה','גאנה','פנמה',
+];
+
+function getSortedParticipatingTeams() {
+    return [...PARTICIPATING_TEAMS].sort((a, b) =>
+        translateTeam(a).localeCompare(translateTeam(b), currentLang)
+    );
+}
+
 // ---- Scoring ----
 
 function getOutcome(g1, g2) {
@@ -744,12 +766,12 @@ function renderTournament() {
     }
 
     const locked = tournamentIsLocked();
-    const { teams, scorers, winner, topScorer } = tournamentSettings;
+    const { scorers, winner, topScorer } = tournamentSettings;
+    const teams = getSortedParticipatingTeams();
     const finalSet = !!(winner || topScorer);
 
-    if (teams.length === 0 && scorers.length === 0) {
-        container.innerHTML = `<p class="state-msg">${t('tournament.emptyAdmin')}</p>`;
-        return;
+    if (scorers.length === 0) {
+        // champion list is always available; only scorers depend on admin
     }
 
     const myWinner    = (specialBets.winner && specialBets.winner.team) || '';
@@ -881,7 +903,6 @@ function setupAdminListeners() {
     $('btn-add-match').addEventListener('click', adminAddMatch);
     $('btn-seed-matches').addEventListener('click', adminSeedMatches);
     $('btn-change-password').addEventListener('click', adminChangePassword);
-    $('btn-save-teams-list').addEventListener('click', adminSaveTeamsList);
     $('btn-save-scorers-list').addEventListener('click', adminSaveScorersList);
     $('btn-save-tournament-result').addEventListener('click', adminSaveTournamentResult);
 }
@@ -1202,9 +1223,8 @@ async function loadAdminTournament() {
     if (!db) return;
     const snap = await ref('settings/tournament').once('value');
     const ts = snap.val() || {};
-    const teams   = Object.values(ts.teams   || {});
+    const teams   = getSortedParticipatingTeams();
     const scorers = Object.values(ts.scorers || {});
-    $('admin-teams-list').value   = teams.join('\n');
     $('admin-scorers-list').value = scorers.join('\n');
 
     const winnerSel = $('admin-final-winner');
@@ -1213,14 +1233,6 @@ async function loadAdminTournament() {
         teams.map(x => `<option value="${escapeHtml(x)}" ${ts.winner === x ? 'selected' : ''}>${escapeHtml(translateTeam(x))}</option>`).join('');
     scorerSel.innerHTML = `<option value="">${t('admin.finalScorerPlaceholder')}</option>` +
         scorers.map(x => `<option value="${escapeHtml(x)}" ${ts.topScorer === x ? 'selected' : ''}>${escapeHtml(x)}</option>`).join('');
-}
-
-async function adminSaveTeamsList() {
-    if (!db) return;
-    const lines = $('admin-teams-list').value.split('\n').map(s => s.trim()).filter(Boolean);
-    await ref('settings/tournament/teams').set(lines);
-    await loadAdminTournament();
-    alert(t('admin.tournamentTeamsSaved'));
 }
 
 async function adminSaveScorersList() {
