@@ -78,6 +78,13 @@ let groupMembers   = {};            // userId → { joinedAt, totalPoints } (cur
 let groupUsersCache = {};           // userId → { name, email }  (for leaderboard display)
 let groupSwitchMenuOpen = false;
 
+// ---- Tournament bets state ----
+let tournamentSettings = { teams: [], scorers: [], winner: null, topScorer: null };
+let specialBets        = {};   // { winner: {team, points, placedAt}, topScorer: {...} }
+let tournamentCountdownTimer = null;
+
+const TOURNAMENT_POINTS = 10;
+
 const INVITE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I/L
 function generateInviteCode() {
     let code = '';
@@ -108,10 +115,10 @@ function parseMatchDate(dateStr) {
 
 function formatDate(dateStr) {
     if (!dateStr) return '';
+    // Stored dates are in Israeli time (IDT = UTC+3). Render in viewer's local timezone.
     return parseMatchDate(dateStr).toLocaleString('he-IL', {
         weekday: 'short', day: 'numeric', month: 'numeric',
         hour: '2-digit', minute: '2-digit',
-        timeZone: 'Asia/Jerusalem',
     });
 }
 
@@ -320,7 +327,20 @@ function startFirebaseListeners() {
         matches = snap.val() || {};
         if (activeTab === 'matches') renderMatches();
         if (activeTab === 'my-bets') renderMyBets();
+        if (activeTab === 'tournament') renderTournament();
     }, permissionError);
+
+    // Tournament settings (global)
+    ref('settings/tournament').on('value', snap => {
+        const t = snap.val() || {};
+        tournamentSettings = {
+            teams:     Object.values(t.teams || {}),
+            scorers:   Object.values(t.scorers || {}),
+            winner:    t.winner || null,
+            topScorer: t.topScorer || null,
+        };
+        if (activeTab === 'tournament') renderTournament();
+    }, () => {});
 
     // User's groups (for switcher UI + routing on group deletion)
     if (currentUser) {
@@ -372,6 +392,12 @@ function startFirebaseListeners() {
             if (activeTab === 'matches')  renderMatches();
             if (activeTab === 'my-bets') renderMyBets();
         }, () => {});
+
+        // Special tournament bets for this user in this group
+        ref(`specialBets/${currentGroupId}/${currentUser.userId}`).on('value', snap => {
+            specialBets = snap.val() || {};
+            if (activeTab === 'tournament') renderTournament();
+        }, () => {});
     }
 }
 
@@ -395,6 +421,10 @@ function renderCurrentTab() {
     if (activeTab === 'matches')     renderMatches();
     else if (activeTab === 'leaderboard') renderLeaderboard();
     else if (activeTab === 'my-bets')     renderMyBets();
+    else if (activeTab === 'tournament')  renderTournament();
+
+    if (activeTab === 'tournament') startTournamentCountdown();
+    else stopTournamentCountdown();
 }
 
 function setStageFilter(stage) {
@@ -467,7 +497,7 @@ function buildMatchCard(m) {
                 <div class="my-bet-score">${bet.team1Goals} – ${bet.team2Goals}</div>
                 <div class="bet-locked-msg">🔒 נעול</div>`;
         } else {
-            middleHtml = `<div class="bet-locked-msg">🔒 לא הימרת</div>`;
+            middleHtml = `<div class="bet-locked-msg">🔒 לא ניחשת</div>`;
         }
     } else {
         // Show bet form (or saved bet with edit option)
@@ -481,9 +511,9 @@ function buildMatchCard(m) {
             const v2 = bet ? bet.team2Goals : 0;
             middleHtml = `
                 <div class="bet-inputs">
-                    <input type="number" class="bet-score-input" id="bet1-${m.id}" min="0" max="30" value="${v1}">
+                    <input type="number" class="bet-score-input" id="bet1-${m.id}" min="0" max="30" value="${v1}" onfocus="this.select()">
                     <span class="bet-sep">–</span>
-                    <input type="number" class="bet-score-input" id="bet2-${m.id}" min="0" max="30" value="${v2}">
+                    <input type="number" class="bet-score-input" id="bet2-${m.id}" min="0" max="30" value="${v2}" onfocus="this.select()">
                 </div>
                 <button class="btn-save-bet" data-match-id="${m.id}">💾 שמור</button>`;
         }
@@ -497,7 +527,7 @@ function buildMatchCard(m) {
         const emoji = pts === 3 ? '🎯' : pts === 1 ? '✅' : '❌';
         pointsHtml = `<div class="match-points-row ${cls}">${emoji} ניחוש: ${bet.team1Goals}–${bet.team2Goals} | ${pts} נקודות</div>`;
     } else if (hasResult && !bet) {
-        pointsHtml = `<div class="match-points-row points-na">לא הימרת על משחק זה</div>`;
+        pointsHtml = `<div class="match-points-row points-na">לא ניחשת על משחק זה</div>`;
     }
 
     return `
@@ -602,7 +632,7 @@ function renderMyBets() {
 
     const betEntries = Object.entries(userBets).filter(([, b]) => !b._editing);
     if (betEntries.length === 0) {
-        container.innerHTML = '<p class="state-msg">עוד לא הימרת על אף משחק.</p>';
+        container.innerHTML = '<p class="state-msg">עוד לא ניחשת על אף משחק.</p>';
         return;
     }
 
@@ -655,6 +685,196 @@ function renderMyBets() {
 }
 
 // ============================================================
+// TOURNAMENT BETS (winner + top scorer)
+// ============================================================
+
+function tournamentLockTime() {
+    // Lock = 1 hour before the first match kicks off
+    const dates = Object.values(matches)
+        .map(m => parseMatchDate(m.date).getTime())
+        .filter(t => t > 0)
+        .sort((a, b) => a - b);
+    if (dates.length === 0) return null;
+    return dates[0] - 60 * 60 * 1000;
+}
+
+function tournamentIsLocked() {
+    const lock = tournamentLockTime();
+    if (!lock) return false;
+    return Date.now() >= lock;
+}
+
+function formatCountdown(ms) {
+    if (ms <= 0) return '0';
+    const total = Math.floor(ms / 1000);
+    const d = Math.floor(total / 86400);
+    const h = Math.floor((total % 86400) / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    if (d > 0) return `${d} ימים, ${h} שעות, ${m} דקות`;
+    if (h > 0) return `${h} שעות, ${m} דקות, ${s} שניות`;
+    return `${m} דקות, ${s} שניות`;
+}
+
+function startTournamentCountdown() {
+    stopTournamentCountdown();
+    const tick = () => {
+        const el = $('tournament-countdown');
+        if (!el) return;
+        const lock = tournamentLockTime();
+        if (!lock) { el.textContent = ''; return; }
+        const now = Date.now();
+        if (now >= lock) {
+            el.innerHTML = '<span class="locked-badge">🔒 הימורי הטורניר ננעלו</span>';
+            return;
+        }
+        el.innerHTML = `⏱ נעילה בעוד: <strong>${formatCountdown(lock - now)}</strong>`;
+    };
+    tick();
+    tournamentCountdownTimer = setInterval(tick, 1000);
+}
+
+function stopTournamentCountdown() {
+    if (tournamentCountdownTimer) {
+        clearInterval(tournamentCountdownTimer);
+        tournamentCountdownTimer = null;
+    }
+}
+
+function renderTournament() {
+    const container = $('tournament-container');
+    if (!currentUser || !currentGroupId) {
+        container.innerHTML = '<p class="state-msg">בחר קבוצה כדי לנחש</p>';
+        return;
+    }
+
+    const locked = tournamentIsLocked();
+    const { teams, scorers, winner, topScorer } = tournamentSettings;
+    const finalSet = !!(winner || topScorer);
+
+    if (teams.length === 0 && scorers.length === 0) {
+        container.innerHTML = '<p class="state-msg">האדמין עוד לא הגדיר מועמדים לניחושי הטורניר.</p>';
+        return;
+    }
+
+    const myWinner    = (specialBets.winner && specialBets.winner.team) || '';
+    const myScorer    = (specialBets.topScorer && specialBets.topScorer.player) || '';
+    const winnerPts   = (specialBets.winner && specialBets.winner.points);
+    const scorerPts   = (specialBets.topScorer && specialBets.topScorer.points);
+
+    const buildOptions = (list, selected) =>
+        `<option value="">— בחר —</option>` +
+        list.map(item => `<option value="${escapeHtml(item)}" ${item === selected ? 'selected' : ''}>${escapeHtml(item)}</option>`).join('');
+
+    const winnerSection = teams.length === 0 ? '' : `
+        <div class="tournament-card">
+            <div class="tournament-card-title">🏆 אלופת המונדיאל</div>
+            <div class="tournament-card-body">
+                ${locked
+                    ? `<div class="tournament-locked">${myWinner ? `הניחוש שלך: <strong>${escapeHtml(myWinner)}</strong>` : 'לא ניחשת'}</div>`
+                    : `<select id="tournament-winner-select" class="tournament-select">${buildOptions(teams, myWinner)}</select>
+                       <button id="btn-save-winner" class="btn btn-primary btn-sm">שמור</button>`
+                }
+                ${finalSet && winner ? `<div class="tournament-result">האלופה: <strong>${escapeHtml(winner)}</strong> ${myWinner === winner ? `<span class="points-3">+${TOURNAMENT_POINTS} נק' ✓</span>` : '<span class="points-0">❌</span>'}</div>` : ''}
+            </div>
+        </div>`;
+
+    const scorerSection = scorers.length === 0 ? '' : `
+        <div class="tournament-card">
+            <div class="tournament-card-title">⚽ מלך השערים</div>
+            <div class="tournament-card-body">
+                ${locked
+                    ? `<div class="tournament-locked">${myScorer ? `הניחוש שלך: <strong>${escapeHtml(myScorer)}</strong>` : 'לא ניחשת'}</div>`
+                    : `<select id="tournament-scorer-select" class="tournament-select">${buildOptions(scorers, myScorer)}</select>
+                       <button id="btn-save-scorer" class="btn btn-primary btn-sm">שמור</button>`
+                }
+                ${finalSet && topScorer ? `<div class="tournament-result">מלך השערים: <strong>${escapeHtml(topScorer)}</strong> ${myScorer === topScorer ? `<span class="points-3">+${TOURNAMENT_POINTS} נק' ✓</span>` : '<span class="points-0">❌</span>'}</div>` : ''}
+            </div>
+        </div>`;
+
+    container.innerHTML = winnerSection + scorerSection;
+
+    if (!locked) {
+        const saveWinnerBtn = $('btn-save-winner');
+        if (saveWinnerBtn) saveWinnerBtn.addEventListener('click', () => {
+            const v = $('tournament-winner-select').value;
+            if (!v) { alert('נא לבחור מועמדת'); return; }
+            saveSpecialBet('winner', { team: v });
+        });
+        const saveScorerBtn = $('btn-save-scorer');
+        if (saveScorerBtn) saveScorerBtn.addEventListener('click', () => {
+            const v = $('tournament-scorer-select').value;
+            if (!v) { alert('נא לבחור מועמד'); return; }
+            saveSpecialBet('topScorer', { player: v });
+        });
+    }
+}
+
+async function saveSpecialBet(kind, payload) {
+    if (!db || !currentUser || !currentGroupId) return;
+    if (tournamentIsLocked()) { alert('הזמן לניחוש עבר'); return; }
+    await ref(`specialBets/${currentGroupId}/${currentUser.userId}/${kind}`).set({
+        ...payload,
+        points: null,
+        placedAt: Date.now(),
+    });
+}
+
+async function recalcMemberTotal(groupId, userId) {
+    if (!db) return;
+    const [betsSnap, specialSnap] = await Promise.all([
+        ref(`bets/${groupId}/${userId}`).once('value'),
+        ref(`specialBets/${groupId}/${userId}`).once('value'),
+    ]);
+    const bets = betsSnap.val() || {};
+    const special = specialSnap.val() || {};
+    const matchPts   = Object.values(bets).reduce((s, b) => s + (b.points || 0), 0);
+    const specialPts = ((special.winner    && special.winner.points)    || 0)
+                     + ((special.topScorer && special.topScorer.points) || 0);
+    await ref(`groups/${groupId}/members/${userId}/totalPoints`).set(matchPts + specialPts);
+}
+
+async function recalcTournamentPoints() {
+    if (!db) return;
+    const tSnap = await ref('settings/tournament').once('value');
+    const t = tSnap.val() || {};
+    const winner = t.winner || null;
+    const topScorer = t.topScorer || null;
+
+    const groupsSnap = await ref('groups').once('value');
+    const groupsData = groupsSnap.val() || {};
+
+    const updates = {};
+    for (const groupId of Object.keys(groupsData)) {
+        const members = (groupsData[groupId] && groupsData[groupId].members) || {};
+        for (const userId of Object.keys(members)) {
+            const sbSnap = await ref(`specialBets/${groupId}/${userId}`).once('value');
+            const sb = sbSnap.val() || {};
+            if (sb.winner) {
+                const pts = winner && sb.winner.team === winner ? TOURNAMENT_POINTS : 0;
+                updates[`specialBets/${groupId}/${userId}/winner/points`] = pts;
+            }
+            if (sb.topScorer) {
+                const pts = topScorer && sb.topScorer.player === topScorer ? TOURNAMENT_POINTS : 0;
+                updates[`specialBets/${groupId}/${userId}/topScorer/points`] = pts;
+            }
+        }
+    }
+    if (Object.keys(updates).length > 0) {
+        await db.ref(FB_ROOT).update(updates);
+    }
+
+    // Recompute totals for every affected member
+    for (const groupId of Object.keys(groupsData)) {
+        const members = (groupsData[groupId] && groupsData[groupId].members) || {};
+        for (const userId of Object.keys(members)) {
+            await recalcMemberTotal(groupId, userId);
+        }
+    }
+}
+
+
+// ============================================================
 // ADMIN: SETUP LISTENERS
 // ============================================================
 
@@ -666,6 +886,9 @@ function setupAdminListeners() {
     $('btn-add-match').addEventListener('click', adminAddMatch);
     $('btn-seed-matches').addEventListener('click', adminSeedMatches);
     $('btn-change-password').addEventListener('click', adminChangePassword);
+    $('btn-save-teams-list').addEventListener('click', adminSaveTeamsList);
+    $('btn-save-scorers-list').addEventListener('click', adminSaveScorersList);
+    $('btn-save-tournament-result').addEventListener('click', adminSaveTournamentResult);
 }
 
 function attemptAdminLogin() {
@@ -680,6 +903,7 @@ function attemptAdminLogin() {
             show('admin-content');
             loadAdminMatches();
             loadAdminUsers();
+            loadAdminTournament();
         } else {
             showEl(errEl);
         }
@@ -876,15 +1100,11 @@ async function recalcPoints(matchId, resG1, resG2) {
         await db.ref(FB_ROOT).update(updates);
     }
 
-    // Recompute each member's total, per group
+    // Recompute each member's total (match + special), per group
     for (const groupId of Object.keys(groupsData)) {
         const members = (groupsData[groupId] && groupsData[groupId].members) || {};
         for (const userId of Object.keys(members)) {
-            const allBetsSnap = await ref(`bets/${groupId}/${userId}`).once('value');
-            const allBets = allBetsSnap.val() || {};
-            const total = Object.values(allBets)
-                .reduce((sum, b) => sum + (b.points || 0), 0);
-            await ref(`groups/${groupId}/members/${userId}/totalPoints`).set(total);
+            await recalcMemberTotal(groupId, userId);
         }
     }
 }
@@ -959,7 +1179,7 @@ async function saveEditUser() {
 }
 
 async function adminDeleteUser(userId, userName) {
-    if (!confirm(`למחוק את המשתמש "${userName}" וכל ההימורים שלו מכל הקבוצות?`)) return;
+    if (!confirm(`למחוק את המשתמש "${userName}" וכל הניחושים שלו מכל הקבוצות?`)) return;
     if (!db) return;
 
     // Remove from every group + bets in every group
@@ -970,6 +1190,7 @@ async function adminDeleteUser(userId, userName) {
     for (const gid of gids) {
         updates[`groups/${gid}/members/${userId}`] = null;
         updates[`bets/${gid}/${userId}`] = null;
+        updates[`specialBets/${gid}/${userId}`] = null;
     }
     updates[`userGroups/${userId}`] = null;
     updates[`users/${userId}`] = null;
@@ -977,6 +1198,58 @@ async function adminDeleteUser(userId, userName) {
     await db.ref(FB_ROOT).update(updates);
     loadAdminUsers();
 }
+
+// ============================================================
+// ADMIN: TOURNAMENT BETS MANAGEMENT
+// ============================================================
+
+async function loadAdminTournament() {
+    if (!db) return;
+    const snap = await ref('settings/tournament').once('value');
+    const t = snap.val() || {};
+    const teams   = Object.values(t.teams   || {});
+    const scorers = Object.values(t.scorers || {});
+    $('admin-teams-list').value   = teams.join('\n');
+    $('admin-scorers-list').value = scorers.join('\n');
+
+    const winnerSel = $('admin-final-winner');
+    const scorerSel = $('admin-final-scorer');
+    winnerSel.innerHTML = '<option value="">— אלופה —</option>' +
+        teams.map(x => `<option value="${escapeHtml(x)}" ${t.winner === x ? 'selected' : ''}>${escapeHtml(x)}</option>`).join('');
+    scorerSel.innerHTML = '<option value="">— מלך השערים —</option>' +
+        scorers.map(x => `<option value="${escapeHtml(x)}" ${t.topScorer === x ? 'selected' : ''}>${escapeHtml(x)}</option>`).join('');
+}
+
+async function adminSaveTeamsList() {
+    if (!db) return;
+    const lines = $('admin-teams-list').value.split('\n').map(s => s.trim()).filter(Boolean);
+    await ref('settings/tournament/teams').set(lines);
+    await loadAdminTournament();
+    alert('רשימת מועמדות לאליפות נשמרה');
+}
+
+async function adminSaveScorersList() {
+    if (!db) return;
+    const lines = $('admin-scorers-list').value.split('\n').map(s => s.trim()).filter(Boolean);
+    await ref('settings/tournament/scorers').set(lines);
+    await loadAdminTournament();
+    alert('רשימת מלך השערים נשמרה');
+}
+
+async function adminSaveTournamentResult() {
+    if (!db) return;
+    const winner    = $('admin-final-winner').value || null;
+    const topScorer = $('admin-final-scorer').value || null;
+    if (!winner && !topScorer) { alert('יש לבחור לפחות אחד'); return; }
+    if (!confirm('לשמור את התוצאה ולחשב נקודות לכל הקבוצות?')) return;
+    const updates = {};
+    updates['settings/tournament/winner']    = winner;
+    updates['settings/tournament/topScorer'] = topScorer;
+    await db.ref(FB_ROOT).update(updates);
+    await recalcTournamentPoints();
+    alert('תוצאת הטורניר נשמרה. הנקודות חושבו בכל הקבוצות.');
+}
+
 
 // ============================================================
 // SEED: WORLD CUP 2026 MATCHES
@@ -1368,6 +1641,7 @@ async function removeMember(userId) {
     const updates = {};
     updates[`groups/${currentGroupId}/members/${userId}`] = null;
     updates[`bets/${currentGroupId}/${userId}`] = null;
+    updates[`specialBets/${currentGroupId}/${userId}`] = null;
     updates[`userGroups/${userId}/${currentGroupId}`] = null;
     await db.ref(FB_ROOT).update(updates);
     openGroupSettingsModal(); // refresh
@@ -1384,6 +1658,7 @@ async function leaveGroup() {
     const updates = {};
     updates[`groups/${currentGroupId}/members/${currentUser.userId}`] = null;
     updates[`bets/${currentGroupId}/${currentUser.userId}`] = null;
+    updates[`specialBets/${currentGroupId}/${currentUser.userId}`] = null;
     updates[`userGroups/${currentUser.userId}/${currentGroupId}`] = null;
     await db.ref(FB_ROOT).update(updates);
     hide('group-settings-modal');
@@ -1394,7 +1669,7 @@ async function deleteGroup() {
     if (!currentGroupId || !db || !currentUser) return;
     const g = userGroups[currentGroupId];
     if (!g || g.ownerId !== currentUser.userId) return;
-    if (!confirm(`למחוק את הקבוצה "${g.name}" לצמיתות? כל ההימורים של חבריה יאבדו.`)) return;
+    if (!confirm(`למחוק את הקבוצה "${g.name}" לצמיתות? כל הניחושים של חבריה יאבדו.`)) return;
 
     const gid = currentGroupId;
     // Collect member ids
@@ -1404,6 +1679,7 @@ async function deleteGroup() {
     const updates = {};
     updates[`groups/${gid}`] = null;
     updates[`bets/${gid}`] = null;
+    updates[`specialBets/${gid}`] = null;
     updates[`inviteCodes/${g.inviteCode}`] = null;
     for (const uid of memberIds) {
         updates[`userGroups/${uid}/${gid}`] = null;

@@ -1106,6 +1106,105 @@ section { display: block; }
 .btn-danger:hover { background: #a33224; }
 
 /* ==========================================
+   TOURNAMENT TAB
+   ========================================== */
+
+.tournament-subtitle {
+    color: var(--text-light);
+    margin-bottom: 12px;
+    font-size: .9rem;
+}
+.tournament-countdown {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 14px;
+    text-align: center;
+    font-size: .95rem;
+}
+.tournament-countdown .locked-badge { color: var(--text-light); font-weight: 700; }
+
+.tournament-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 16px;
+    margin-bottom: 12px;
+}
+.tournament-card-title {
+    font-weight: 800;
+    color: var(--green-dark);
+    margin-bottom: 10px;
+    font-size: 1.05rem;
+}
+.tournament-card-body {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.tournament-select {
+    flex: 1;
+    min-width: 160px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    font-family: inherit;
+    font-size: .95rem;
+}
+.tournament-locked {
+    flex: 1;
+    color: var(--text-light);
+    padding: 6px 0;
+}
+.tournament-result {
+    flex-basis: 100%;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    margin-top: 6px;
+    font-size: .95rem;
+}
+.tournament-result .points-3 {
+    background: var(--green-light);
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-right: 6px;
+}
+.tournament-result .points-0 {
+    margin-right: 6px;
+}
+
+/* Admin tournament */
+.tournament-admin-col {
+    flex: 1;
+    min-width: 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.tournament-admin-col textarea {
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: .9rem;
+    resize: vertical;
+}
+.admin-hint {
+    color: var(--text-light);
+    font-size: .85rem;
+    margin-bottom: 8px;
+}
+.admin-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 16px 0;
+}
+
+/* ==========================================
    RESPONSIVE
    ========================================== */
 
