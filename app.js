@@ -6,15 +6,10 @@ const FB_ROOT = 'worldcup2026';
 
 // ---- Stage / flag helpers ----
 
-const STAGE_LABELS = {
-    group: 'שלב הבתים',
-    R32:   'שלב 32',
-    R16:   'שלב 16',
-    QF:    'רבע גמר',
-    SF:    'חצי גמר',
-    '3rd': 'מקום שלישי',
-    Final: 'גמר',
-};
+function getStageLabel(stage) {
+    return t('stage.' + stage);
+}
+function getGroupPrefix() { return t('stage.groupPrefix'); }
 
 const STAGE_ORDER = ['group','R32','R16','QF','SF','3rd','Final'];
 
@@ -255,7 +250,7 @@ async function handleLogin(e) {
     hideEl(errEl);
 
     if (!name || !email) {
-        errEl.textContent = 'נא למלא שם ואימייל';
+        errEl.textContent = t('login.errorRequired');
         showEl(errEl);
         return;
     }
@@ -453,7 +448,7 @@ function renderMatches() {
         });
 
     if (matchList.length === 0) {
-        container.innerHTML = '<p class="state-msg">אין משחקים להצגה. האדמין יכול לטעון את המשחקים.</p>';
+        container.innerHTML = `<p class="state-msg">${t('match.emptyState')}</p>`;
         return;
     }
 
@@ -479,11 +474,11 @@ function buildMatchCard(m) {
     // Status badge
     let badgeClass, badgeText;
     if (hasResult) {
-        badgeClass = 'badge-completed'; badgeText = 'הסתיים';
+        badgeClass = 'badge-completed'; badgeText = t('match.status.completed');
     } else if (locked) {
-        badgeClass = 'badge-locked'; badgeText = 'נעול';
+        badgeClass = 'badge-locked'; badgeText = t('match.status.locked');
     } else {
-        badgeClass = 'badge-upcoming'; badgeText = 'עתידי';
+        badgeClass = 'badge-upcoming'; badgeText = t('match.status.upcoming');
     }
 
     // Middle content
@@ -493,19 +488,19 @@ function buildMatchCard(m) {
     } else if (locked) {
         if (bet) {
             middleHtml = `
-                <div class="my-bet-label">ניחוש שלך</div>
+                <div class="my-bet-label">${t('match.yourBet')}</div>
                 <div class="my-bet-score">${bet.team1Goals} – ${bet.team2Goals}</div>
-                <div class="bet-locked-msg">🔒 נעול</div>`;
+                <div class="bet-locked-msg">${t('match.lockedMsg')}</div>`;
         } else {
-            middleHtml = `<div class="bet-locked-msg">🔒 לא ניחשת</div>`;
+            middleHtml = `<div class="bet-locked-msg">${t('match.lockedNoBet')}</div>`;
         }
     } else {
         // Show bet form (or saved bet with edit option)
         if (bet && !bet._editing) {
             middleHtml = `
-                <div class="my-bet-label">ניחוש שלך</div>
+                <div class="my-bet-label">${t('match.yourBet')}</div>
                 <div class="my-bet-score">${bet.team1Goals} – ${bet.team2Goals}</div>
-                <button class="bet-edit-link" data-match-id="${m.id}">ערוך</button>`;
+                <button class="bet-edit-link" data-match-id="${m.id}">${t('match.editBet')}</button>`;
         } else {
             const v1 = bet ? bet.team1Goals : 0;
             const v2 = bet ? bet.team2Goals : 0;
@@ -515,7 +510,7 @@ function buildMatchCard(m) {
                     <span class="bet-sep">–</span>
                     <input type="number" class="bet-score-input" id="bet2-${m.id}" min="0" max="30" value="${v2}" onfocus="this.select()">
                 </div>
-                <button class="btn-save-bet" data-match-id="${m.id}">💾 שמור</button>`;
+                <button class="btn-save-bet" data-match-id="${m.id}">${t('match.saveBet')}</button>`;
         }
     }
 
@@ -525,9 +520,9 @@ function buildMatchCard(m) {
         const pts = bet.points;
         const cls = pts === 3 ? 'points-3' : pts === 1 ? 'points-1' : 'points-0';
         const emoji = pts === 3 ? '🎯' : pts === 1 ? '✅' : '❌';
-        pointsHtml = `<div class="match-points-row ${cls}">${emoji} ניחוש: ${bet.team1Goals}–${bet.team2Goals} | ${pts} נקודות</div>`;
+        pointsHtml = `<div class="match-points-row ${cls}">${emoji} ${t('match.pointsRow')}: ${bet.team1Goals}–${bet.team2Goals} | ${pts} ${t('match.pointsLabel')}</div>`;
     } else if (hasResult && !bet) {
-        pointsHtml = `<div class="match-points-row points-na">לא ניחשת על משחק זה</div>`;
+        pointsHtml = `<div class="match-points-row points-na">${t('match.noBetRow')}</div>`;
     }
 
     return `
@@ -540,12 +535,12 @@ function buildMatchCard(m) {
             <div class="match-teams-row">
                 <div class="match-team">
                     <span class="team-flag">${getFlag(m.team1)}</span>
-                    <span class="team-name">${m.team1}</span>
+                    <span class="team-name">${translateTeam(m.team1)}</span>
                 </div>
                 <div class="match-middle">${middleHtml}</div>
                 <div class="match-team">
                     <span class="team-flag">${getFlag(m.team2)}</span>
-                    <span class="team-name">${m.team2}</span>
+                    <span class="team-name">${translateTeam(m.team2)}</span>
                 </div>
             </div>
             ${pointsHtml}
@@ -595,13 +590,13 @@ function renderLeaderboard() {
     const entries = Object.entries(groupMembers)
         .map(([uid, m]) => ({
             userId: uid,
-            name: (groupUsersCache[uid] && groupUsersCache[uid].name) || 'משתמש',
+            name: (groupUsersCache[uid] && groupUsersCache[uid].name) || t('groupSettings.unknownUser'),
             totalPoints: m.totalPoints || 0,
         }))
         .sort((a, b) => b.totalPoints - a.totalPoints);
 
     if (entries.length === 0) {
-        container.innerHTML = '<p class="state-msg">אין משתתפים עדיין בקבוצה זו.</p>';
+        container.innerHTML = `<p class="state-msg">${t('leaderboard.empty')}</p>`;
         return;
     }
 
@@ -610,12 +605,12 @@ function renderLeaderboard() {
         const rank    = i + 1;
         const isMe    = currentUser && u.userId === currentUser.userId;
         const medal   = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `${rank}.`;
-        const meTag   = isMe ? '<span class="lb-me-tag">אני</span>' : '';
+        const meTag   = isMe ? `<span class="lb-me-tag">${t('leaderboard.meTag')}</span>` : '';
         html += `
         <div class="leaderboard-row ${isMe ? 'is-me' : ''}">
             <span class="lb-rank">${medal}</span>
             <span class="lb-name">${escapeHtml(u.name)} ${meTag}</span>
-            <span class="lb-points">${u.totalPoints} <span class="lb-pts-label">נק'</span></span>
+            <span class="lb-points">${u.totalPoints} <span class="lb-pts-label">${t('common.pts')}</span></span>
         </div>`;
     });
     html += '</div>';
@@ -632,7 +627,7 @@ function renderMyBets() {
 
     const betEntries = Object.entries(userBets).filter(([, b]) => !b._editing);
     if (betEntries.length === 0) {
-        container.innerHTML = '<p class="state-msg">עוד לא ניחשת על אף משחק.</p>';
+        container.innerHTML = `<p class="state-msg">${t('myBets.empty')}</p>`;
         return;
     }
 
@@ -650,29 +645,29 @@ function renderMyBets() {
         let ptsBadge = '';
         if (hasResult && pts !== null && pts !== undefined) {
             const cls = pts === 3 ? 'points-3' : pts === 1 ? 'points-1' : 'points-0';
-            ptsBadge = `<span class="match-points-row ${cls}" style="display:inline-block;padding:2px 10px;">${pts} נק'</span>`;
+            ptsBadge = `<span class="match-points-row ${cls}" style="display:inline-block;padding:2px 10px;">${pts} ${t('common.pts')}</span>`;
         }
 
         const resultStr = hasResult
             ? `<div class="my-bet-col">
-                 <span class="my-bet-col-label">תוצאה</span>
+                 <span class="my-bet-col-label">${t('myBets.result')}</span>
                  <span class="my-bet-col-value result-val">${m.result.team1Goals}–${m.result.team2Goals}</span>
                </div>`
             : '';
 
         const stageLabel = m.stage === 'group'
-            ? `בית ${m.group || ''}`
-            : (STAGE_LABELS[m.stage] || m.stage);
+            ? `${getGroupPrefix()} ${m.group || ''}`
+            : getStageLabel(m.stage);
 
         html += `
         <div class="my-bet-card">
             <div class="my-bet-match-info">
-                <span class="my-bet-teams">${getFlag(m.team1)} ${escapeHtml(m.team1)} vs ${escapeHtml(m.team2)} ${getFlag(m.team2)}</span>
+                <span class="my-bet-teams">${getFlag(m.team1)} ${escapeHtml(translateTeam(m.team1))} vs ${escapeHtml(translateTeam(m.team2))} ${getFlag(m.team2)}</span>
                 <span class="my-bet-date">${stageLabel} · ${formatDate(m.date)}</span>
             </div>
             <div class="my-bet-scores-row">
                 <div class="my-bet-col">
-                    <span class="my-bet-col-label">הניחוש שלי</span>
+                    <span class="my-bet-col-label">${t('myBets.prediction')}</span>
                     <span class="my-bet-col-value">${bet.team1Goals}–${bet.team2Goals}</span>
                 </div>
                 ${resultStr}
@@ -711,9 +706,9 @@ function formatCountdown(ms) {
     const h = Math.floor((total % 86400) / 3600);
     const m = Math.floor((total % 3600) / 60);
     const s = total % 60;
-    if (d > 0) return `${d} ימים, ${h} שעות, ${m} דקות`;
-    if (h > 0) return `${h} שעות, ${m} דקות, ${s} שניות`;
-    return `${m} דקות, ${s} שניות`;
+    if (d > 0) return `${d} ${t('tournament.days')}, ${h} ${t('tournament.hours')}, ${m} ${t('tournament.minutes')}`;
+    if (h > 0) return `${h} ${t('tournament.hours')}, ${m} ${t('tournament.minutes')}, ${s} ${t('tournament.seconds')}`;
+    return `${m} ${t('tournament.minutes')}, ${s} ${t('tournament.seconds')}`;
 }
 
 function startTournamentCountdown() {
@@ -725,10 +720,10 @@ function startTournamentCountdown() {
         if (!lock) { el.textContent = ''; return; }
         const now = Date.now();
         if (now >= lock) {
-            el.innerHTML = '<span class="locked-badge">🔒 הימורי הטורניר ננעלו</span>';
+            el.innerHTML = `<span class="locked-badge">${t('tournament.lockedBadge')}</span>`;
             return;
         }
-        el.innerHTML = `⏱ נעילה בעוד: <strong>${formatCountdown(lock - now)}</strong>`;
+        el.innerHTML = `⏱ ${t('tournament.lockSoon')} <strong>${formatCountdown(lock - now)}</strong>`;
     };
     tick();
     tournamentCountdownTimer = setInterval(tick, 1000);
@@ -744,7 +739,7 @@ function stopTournamentCountdown() {
 function renderTournament() {
     const container = $('tournament-container');
     if (!currentUser || !currentGroupId) {
-        container.innerHTML = '<p class="state-msg">בחר קבוצה כדי לנחש</p>';
+        container.innerHTML = `<p class="state-msg">${t('tournament.needGroup')}</p>`;
         return;
     }
 
@@ -753,7 +748,7 @@ function renderTournament() {
     const finalSet = !!(winner || topScorer);
 
     if (teams.length === 0 && scorers.length === 0) {
-        container.innerHTML = '<p class="state-msg">האדמין עוד לא הגדיר מועמדים לניחושי הטורניר.</p>';
+        container.innerHTML = `<p class="state-msg">${t('tournament.emptyAdmin')}</p>`;
         return;
     }
 
@@ -762,33 +757,33 @@ function renderTournament() {
     const winnerPts   = (specialBets.winner && specialBets.winner.points);
     const scorerPts   = (specialBets.topScorer && specialBets.topScorer.points);
 
-    const buildOptions = (list, selected) =>
-        `<option value="">— בחר —</option>` +
-        list.map(item => `<option value="${escapeHtml(item)}" ${item === selected ? 'selected' : ''}>${escapeHtml(item)}</option>`).join('');
+    const buildOptions = (list, selected, translator) =>
+        `<option value="">${t('tournament.selectPrompt')}</option>` +
+        list.map(item => `<option value="${escapeHtml(item)}" ${item === selected ? 'selected' : ''}>${escapeHtml(translator ? translator(item) : item)}</option>`).join('');
 
     const winnerSection = teams.length === 0 ? '' : `
         <div class="tournament-card">
-            <div class="tournament-card-title">🏆 אלופת המונדיאל</div>
+            <div class="tournament-card-title">${t('tournament.champion')}</div>
             <div class="tournament-card-body">
                 ${locked
-                    ? `<div class="tournament-locked">${myWinner ? `הניחוש שלך: <strong>${escapeHtml(myWinner)}</strong>` : 'לא ניחשת'}</div>`
-                    : `<select id="tournament-winner-select" class="tournament-select">${buildOptions(teams, myWinner)}</select>
-                       <button id="btn-save-winner" class="btn btn-primary btn-sm">שמור</button>`
+                    ? `<div class="tournament-locked">${myWinner ? `${t('tournament.yourBetPrefix')} <strong>${escapeHtml(translateTeam(myWinner))}</strong>` : t('tournament.noBet')}</div>`
+                    : `<select id="tournament-winner-select" class="tournament-select">${buildOptions(teams, myWinner, translateTeam)}</select>
+                       <button id="btn-save-winner" class="btn btn-primary btn-sm">${t('common.save')}</button>`
                 }
-                ${finalSet && winner ? `<div class="tournament-result">האלופה: <strong>${escapeHtml(winner)}</strong> ${myWinner === winner ? `<span class="points-3">+${TOURNAMENT_POINTS} נק' ✓</span>` : '<span class="points-0">❌</span>'}</div>` : ''}
+                ${finalSet && winner ? `<div class="tournament-result">${t('tournament.resultChampion')} <strong>${escapeHtml(translateTeam(winner))}</strong> ${myWinner === winner ? `<span class="points-3">+${TOURNAMENT_POINTS} ${t('common.pts')} ✓</span>` : '<span class="points-0">❌</span>'}</div>` : ''}
             </div>
         </div>`;
 
     const scorerSection = scorers.length === 0 ? '' : `
         <div class="tournament-card">
-            <div class="tournament-card-title">⚽ מלך השערים</div>
+            <div class="tournament-card-title">${t('tournament.topScorer')}</div>
             <div class="tournament-card-body">
                 ${locked
-                    ? `<div class="tournament-locked">${myScorer ? `הניחוש שלך: <strong>${escapeHtml(myScorer)}</strong>` : 'לא ניחשת'}</div>`
+                    ? `<div class="tournament-locked">${myScorer ? `${t('tournament.yourBetPrefix')} <strong>${escapeHtml(myScorer)}</strong>` : t('tournament.noBet')}</div>`
                     : `<select id="tournament-scorer-select" class="tournament-select">${buildOptions(scorers, myScorer)}</select>
-                       <button id="btn-save-scorer" class="btn btn-primary btn-sm">שמור</button>`
+                       <button id="btn-save-scorer" class="btn btn-primary btn-sm">${t('common.save')}</button>`
                 }
-                ${finalSet && topScorer ? `<div class="tournament-result">מלך השערים: <strong>${escapeHtml(topScorer)}</strong> ${myScorer === topScorer ? `<span class="points-3">+${TOURNAMENT_POINTS} נק' ✓</span>` : '<span class="points-0">❌</span>'}</div>` : ''}
+                ${finalSet && topScorer ? `<div class="tournament-result">${t('tournament.resultTopScorer')} <strong>${escapeHtml(topScorer)}</strong> ${myScorer === topScorer ? `<span class="points-3">+${TOURNAMENT_POINTS} ${t('common.pts')} ✓</span>` : '<span class="points-0">❌</span>'}</div>` : ''}
             </div>
         </div>`;
 
@@ -798,13 +793,13 @@ function renderTournament() {
         const saveWinnerBtn = $('btn-save-winner');
         if (saveWinnerBtn) saveWinnerBtn.addEventListener('click', () => {
             const v = $('tournament-winner-select').value;
-            if (!v) { alert('נא לבחור מועמדת'); return; }
+            if (!v) { alert(t('tournament.pickNeeded')); return; }
             saveSpecialBet('winner', { team: v });
         });
         const saveScorerBtn = $('btn-save-scorer');
         if (saveScorerBtn) saveScorerBtn.addEventListener('click', () => {
             const v = $('tournament-scorer-select').value;
-            if (!v) { alert('נא לבחור מועמד'); return; }
+            if (!v) { alert(t('tournament.pickNeeded')); return; }
             saveSpecialBet('topScorer', { player: v });
         });
     }
@@ -812,7 +807,7 @@ function renderTournament() {
 
 async function saveSpecialBet(kind, payload) {
     if (!db || !currentUser || !currentGroupId) return;
-    if (tournamentIsLocked()) { alert('הזמן לניחוש עבר'); return; }
+    if (tournamentIsLocked()) { alert(t('tournament.locked')); return; }
     await ref(`specialBets/${currentGroupId}/${currentUser.userId}/${kind}`).set({
         ...payload,
         points: null,
@@ -921,10 +916,10 @@ function attemptAdminLogin() {
 
 function adminChangePassword() {
     const newPwd = $('new-password-input').value.trim();
-    if (!newPwd || newPwd.length < 4) { alert('סיסמה חייבת להכיל לפחות 4 תווים'); return; }
+    if (!newPwd || newPwd.length < 4) { alert(t('admin.pwdTooShort')); return; }
     if (db) ref('settings/adminPassword').set(newPwd).catch(err => console.warn('Failed to save password:', err));
     $('new-password-input').value = '';
-    alert('הסיסמה שונתה בהצלחה!');
+    alert(t('admin.pwdSaved'));
 }
 
 // ============================================================
@@ -938,7 +933,7 @@ async function adminAddMatch() {
     const stage = $('new-stage').value;
     const grp   = $('new-group-label').value.trim().toUpperCase();
 
-    if (!t1 || !t2 || !date) { alert('נא למלא קבוצה 1, קבוצה 2 ותאריך'); return; }
+    if (!t1 || !t2 || !date) { alert(t('admin.addMatchMissing')); return; }
 
     const matchData = {
         team1: t1, team2: t2,
@@ -970,15 +965,15 @@ function renderAdminMatches(data) {
     const list = Object.entries(data).sort((a, b) => parseMatchDate(a[1].date) - parseMatchDate(b[1].date));
 
     if (list.length === 0) {
-        container.innerHTML = '<p class="state-msg">אין משחקים עדיין.</p>';
+        container.innerHTML = `<p class="state-msg">${t('admin.noMatches')}</p>`;
         return;
     }
 
     let html = '';
     list.forEach(([id, m]) => {
         const stageLabel = m.stage === 'group'
-            ? `בית ${m.group || ''}`
-            : (STAGE_LABELS[m.stage] || m.stage);
+            ? `${getGroupPrefix()} ${m.group || ''}`
+            : getStageLabel(m.stage);
         const resultStr = m.result
             ? `<span class="admin-result-badge">${m.result.team1Goals}–${m.result.team2Goals}</span>`
             : '';
@@ -986,13 +981,13 @@ function renderAdminMatches(data) {
         html += `
         <div class="admin-match-row" id="admin-row-${id}">
             <div class="admin-match-info">
-                <div class="admin-match-teams">${getFlag(m.team1)} ${escapeHtml(m.team1)} vs ${escapeHtml(m.team2)} ${getFlag(m.team2)} ${resultStr}</div>
+                <div class="admin-match-teams">${getFlag(m.team1)} ${escapeHtml(translateTeam(m.team1))} vs ${escapeHtml(translateTeam(m.team2))} ${getFlag(m.team2)} ${resultStr}</div>
                 <div class="admin-match-meta">${stageLabel} · ${formatDate(m.date)}</div>
             </div>
             <div class="admin-match-actions">
-                <button class="btn btn-secondary btn-sm" onclick="openEditModal('${id}')">ערוך</button>
-                <button class="btn btn-primary btn-sm" onclick="openResultModal('${id}')">הזן תוצאה</button>
-                <button class="btn btn-danger btn-sm" onclick="adminDeleteMatch('${id}')">מחק</button>
+                <button class="btn btn-secondary btn-sm" onclick="openEditModal('${id}')">${t('common.edit')}</button>
+                <button class="btn btn-primary btn-sm" onclick="openResultModal('${id}')">${t('admin.enterResult')}</button>
+                <button class="btn btn-danger btn-sm" onclick="adminDeleteMatch('${id}')">${t('common.delete')}</button>
             </div>
         </div>`;
     });
@@ -1001,7 +996,7 @@ function renderAdminMatches(data) {
 }
 
 async function adminDeleteMatch(matchId) {
-    if (!confirm('למחוק משחק זה?')) return;
+    if (!confirm(t('admin.deleteMatchConfirm'))) return;
     if (db) await ref(`matches/${matchId}`).remove();
 }
 
@@ -1030,7 +1025,7 @@ async function saveEditMatch() {
     const stage = $('edit-stage').value;
     const grp   = $('edit-group-label').value.trim().toUpperCase();
 
-    if (!t1 || !t2 || !date) { alert('נא למלא שדות חובה'); return; }
+    if (!t1 || !t2 || !date) { alert(t('admin.saveMissing')); return; }
 
     if (db) {
         await ref(`matches/${matchId}`).update({
@@ -1048,9 +1043,9 @@ function openResultModal(matchId) {
     ref(`matches/${matchId}`).once('value').then(snap => {
         const m = snap.val();
         if (!m) return;
-        $('modal-match-title').textContent = `${m.team1} vs ${m.team2}`;
-        $('modal-team1-name').textContent  = m.team1;
-        $('modal-team2-name').textContent  = m.team2;
+        $('modal-match-title').textContent = `${translateTeam(m.team1)} vs ${translateTeam(m.team2)}`;
+        $('modal-team1-name').textContent  = translateTeam(m.team1);
+        $('modal-team2-name').textContent  = translateTeam(m.team2);
         $('modal-score1').value = m.result ? m.result.team1Goals : 0;
         $('modal-score2').value = m.result ? m.result.team2Goals : 0;
         show('result-modal');
@@ -1075,7 +1070,7 @@ async function saveResult() {
 
     // Recalculate points for all users
     await recalcPoints(matchId, g1, g2);
-    alert('תוצאה נשמרה! הנקודות חושבו מחדש.');
+    alert(t('admin.resultSaved'));
 }
 
 async function recalcPoints(matchId, resG1, resG2) {
@@ -1124,7 +1119,7 @@ function loadAdminUsers() {
     }).catch(err => {
         console.error('Failed to load users:', err);
         $('admin-users-container').innerHTML =
-            '<p class="state-msg" style="color:#e53e3e">שגיאה בטעינת משתמשים.<br>בדוק הרשאות Firebase.</p>';
+            '<p class="state-msg" style="color:#e53e3e">Error loading users.</p>';
     });
 }
 
@@ -1133,7 +1128,7 @@ async function renderAdminUsers(data) {
     const list = Object.entries(data).sort((a, b) => (a[1].name || '').localeCompare(b[1].name || ''));
 
     if (list.length === 0) {
-        container.innerHTML = '<p class="state-msg">אין משתמשים רשומים.</p>';
+        container.innerHTML = `<p class="state-msg">${t('admin.noUsers')}</p>`;
         return;
     }
 
@@ -1148,11 +1143,11 @@ async function renderAdminUsers(data) {
         <div class="admin-match-row" id="admin-user-row-${userId}">
             <div class="admin-match-info">
                 <div class="admin-match-teams">${escapeHtml(u.name)}</div>
-                <div class="admin-match-meta">${escapeHtml(u.email)} · ${groupCount} קבוצות</div>
+                <div class="admin-match-meta">${escapeHtml(u.email)} · ${groupCount} ${t('admin.groupsCount')}</div>
             </div>
             <div class="admin-match-actions">
-                <button class="btn btn-secondary btn-sm" onclick="openEditUserModal('${userId}')">ערוך שם</button>
-                <button class="btn btn-danger btn-sm" onclick="adminDeleteUser('${userId}', '${escapeHtml(u.name).replace(/'/g, "\\'")}')">מחק</button>
+                <button class="btn btn-secondary btn-sm" onclick="openEditUserModal('${userId}')">${t('admin.userEditName')}</button>
+                <button class="btn btn-danger btn-sm" onclick="adminDeleteUser('${userId}', '${escapeHtml(u.name).replace(/'/g, "\\'")}')">${t('common.delete')}</button>
             </div>
         </div>`;
     });
@@ -1173,13 +1168,13 @@ function openEditUserModal(userId) {
 async function saveEditUser() {
     const userId = $('edit-user-id').value;
     const name   = $('edit-user-name').value.trim();
-    if (!name) { alert('נא להזין שם'); return; }
+    if (!name) { alert(t('admin.editUserEmpty')); return; }
     if (db) await ref(`users/${userId}/name`).set(name);
     hide('edit-user-modal');
 }
 
 async function adminDeleteUser(userId, userName) {
-    if (!confirm(`למחוק את המשתמש "${userName}" וכל הניחושים שלו מכל הקבוצות?`)) return;
+    if (!confirm(t('admin.deleteUserConfirm', userName))) return;
     if (!db) return;
 
     // Remove from every group + bets in every group
@@ -1206,18 +1201,18 @@ async function adminDeleteUser(userId, userName) {
 async function loadAdminTournament() {
     if (!db) return;
     const snap = await ref('settings/tournament').once('value');
-    const t = snap.val() || {};
-    const teams   = Object.values(t.teams   || {});
-    const scorers = Object.values(t.scorers || {});
+    const ts = snap.val() || {};
+    const teams   = Object.values(ts.teams   || {});
+    const scorers = Object.values(ts.scorers || {});
     $('admin-teams-list').value   = teams.join('\n');
     $('admin-scorers-list').value = scorers.join('\n');
 
     const winnerSel = $('admin-final-winner');
     const scorerSel = $('admin-final-scorer');
-    winnerSel.innerHTML = '<option value="">— אלופה —</option>' +
-        teams.map(x => `<option value="${escapeHtml(x)}" ${t.winner === x ? 'selected' : ''}>${escapeHtml(x)}</option>`).join('');
-    scorerSel.innerHTML = '<option value="">— מלך השערים —</option>' +
-        scorers.map(x => `<option value="${escapeHtml(x)}" ${t.topScorer === x ? 'selected' : ''}>${escapeHtml(x)}</option>`).join('');
+    winnerSel.innerHTML = `<option value="">${t('admin.finalWinnerPlaceholder')}</option>` +
+        teams.map(x => `<option value="${escapeHtml(x)}" ${ts.winner === x ? 'selected' : ''}>${escapeHtml(translateTeam(x))}</option>`).join('');
+    scorerSel.innerHTML = `<option value="">${t('admin.finalScorerPlaceholder')}</option>` +
+        scorers.map(x => `<option value="${escapeHtml(x)}" ${ts.topScorer === x ? 'selected' : ''}>${escapeHtml(x)}</option>`).join('');
 }
 
 async function adminSaveTeamsList() {
@@ -1225,7 +1220,7 @@ async function adminSaveTeamsList() {
     const lines = $('admin-teams-list').value.split('\n').map(s => s.trim()).filter(Boolean);
     await ref('settings/tournament/teams').set(lines);
     await loadAdminTournament();
-    alert('רשימת מועמדות לאליפות נשמרה');
+    alert(t('admin.tournamentTeamsSaved'));
 }
 
 async function adminSaveScorersList() {
@@ -1233,21 +1228,21 @@ async function adminSaveScorersList() {
     const lines = $('admin-scorers-list').value.split('\n').map(s => s.trim()).filter(Boolean);
     await ref('settings/tournament/scorers').set(lines);
     await loadAdminTournament();
-    alert('רשימת מלך השערים נשמרה');
+    alert(t('admin.tournamentScorersSaved'));
 }
 
 async function adminSaveTournamentResult() {
     if (!db) return;
     const winner    = $('admin-final-winner').value || null;
     const topScorer = $('admin-final-scorer').value || null;
-    if (!winner && !topScorer) { alert('יש לבחור לפחות אחד'); return; }
-    if (!confirm('לשמור את התוצאה ולחשב נקודות לכל הקבוצות?')) return;
+    if (!winner && !topScorer) { alert(t('admin.tournamentNeedsPick')); return; }
+    if (!confirm(t('admin.tournamentSaveConfirm'))) return;
     const updates = {};
     updates['settings/tournament/winner']    = winner;
     updates['settings/tournament/topScorer'] = topScorer;
     await db.ref(FB_ROOT).update(updates);
     await recalcTournamentPoints();
-    alert('תוצאת הטורניר נשמרה. הנקודות חושבו בכל הקבוצות.');
+    alert(t('admin.tournamentSaved'));
 }
 
 
@@ -1394,7 +1389,7 @@ function toggleGroupSwitchMenu(forceState) {
 function renderGroupSwitcher() {
     // Active group label in app bar
     const active = currentGroupId && userGroups[currentGroupId];
-    $('active-group-name').textContent = active ? active.name : '—';
+    $('active-group-name').textContent = active ? active.name : t('appBar.noGroup');
 
     // Show/hide settings option based on ownership
     const settingsBtn = $('btn-open-group-settings');
@@ -1408,7 +1403,7 @@ function renderGroupSwitcher() {
     if (!list) return;
     const entries = Object.entries(userGroups);
     if (entries.length === 0) {
-        list.innerHTML = '<p style="padding:10px;color:var(--text-light);font-size:.85rem">עדיין לא הצטרפת לקבוצה</p>';
+        list.innerHTML = `<p style="padding:10px;color:var(--text-light);font-size:.85rem">${t('groupSwitch.emptyMsg')}</p>`;
         return;
     }
     list.innerHTML = entries.map(([gid, g]) => {
@@ -1451,7 +1446,7 @@ async function confirmCreateGroup() {
     const errEl = $('create-group-error');
     hideEl(errEl);
     if (!name) {
-        errEl.textContent = 'נא להזין שם קבוצה';
+        errEl.textContent = t('createGroup.errorName');
         showEl(errEl);
         return;
     }
@@ -1492,17 +1487,17 @@ async function confirmCreateGroup() {
         localStorage.setItem('wc2026_activeGroup', groupId);
 
         // Change cancel button to "enter group"
-        $('btn-cancel-create-group').textContent = 'כנס לקבוצה';
+        $('btn-cancel-create-group').textContent = t('createGroup.enter');
     } catch (err) {
         console.error(err);
-        errEl.textContent = 'שגיאה ביצירת הקבוצה';
+        errEl.textContent = t('createGroup.errorGeneric');
         showEl(errEl);
     }
 }
 
 function closeCreateGroupModal() {
     hide('create-group-modal');
-    $('btn-cancel-create-group').textContent = 'ביטול';
+    $('btn-cancel-create-group').textContent = t('common.cancel');
     // If we created a group mid-flow, enter the app
     if (currentUser && currentGroupId && $('group-picker-screen') && !$('group-picker-screen').classList.contains('hidden')) {
         enterAppForGroup(currentGroupId);
@@ -1524,7 +1519,7 @@ async function confirmJoinGroup() {
     const errEl = $('join-group-error');
     hideEl(errEl);
     if (!rawCode || rawCode.length !== 6) {
-        errEl.textContent = 'קוד הזמנה חייב להיות בן 6 תווים';
+        errEl.textContent = t('joinGroup.errorLength');
         showEl(errEl);
         return;
     }
@@ -1533,7 +1528,7 @@ async function confirmJoinGroup() {
     try {
         const snap = await ref(`inviteCodes/${rawCode}`).once('value');
         if (!snap.exists()) {
-            errEl.textContent = 'קוד הזמנה לא תקין';
+            errEl.textContent = t('joinGroup.errorInvalid');
             showEl(errEl);
             return;
         }
@@ -1561,7 +1556,7 @@ async function confirmJoinGroup() {
         }
     } catch (err) {
         console.error(err);
-        errEl.textContent = 'שגיאה בהצטרפות לקבוצה';
+        errEl.textContent = t('joinGroup.errorGeneric');
         showEl(errEl);
     }
 }
@@ -1598,17 +1593,17 @@ async function openGroupSettingsModal() {
                 name = u.name;
             }
         }
-        name = name || 'משתמש';
+        name = name || t('groupSettings.unknownUser');
         const isThisOwner = uid === g.ownerId;
         const canKick = isOwner && !isThisOwner;
         rows.push(`
             <div class="group-member-row">
                 <div>
                     <span class="member-name">${escapeHtml(name)}</span>
-                    ${isThisOwner ? '<span class="owner-badge">מנהל</span>' : ''}
-                    <span class="member-meta">${members[uid].totalPoints || 0} נק'</span>
+                    ${isThisOwner ? `<span class="owner-badge">${t('groupSettings.ownerBadge')}</span>` : ''}
+                    <span class="member-meta">${members[uid].totalPoints || 0} ${t('common.pts')}</span>
                 </div>
-                ${canKick ? `<button class="btn btn-danger btn-sm" onclick="removeMember('${uid}')">הסר</button>` : ''}
+                ${canKick ? `<button class="btn btn-danger btn-sm" onclick="removeMember('${uid}')">${t('groupSettings.kick')}</button>` : ''}
             </div>`);
     }
     container.innerHTML = rows.join('');
@@ -1621,7 +1616,7 @@ async function renameGroup() {
     const errEl = $('group-settings-error');
     hideEl(errEl);
     if (!newName) {
-        errEl.textContent = 'נא להזין שם';
+        errEl.textContent = t('groupSettings.errorEmpty');
         showEl(errEl);
         return;
     }
@@ -1629,7 +1624,7 @@ async function renameGroup() {
     await ref(`groups/${currentGroupId}/name`).set(newName);
     if (userGroups[currentGroupId]) userGroups[currentGroupId].name = newName;
     renderGroupSwitcher();
-    errEl.textContent = 'השם נשמר ✓';
+    errEl.textContent = t('groupSettings.savedOk');
     errEl.style.color = 'var(--green-mid)';
     showEl(errEl);
     setTimeout(() => { hideEl(errEl); errEl.style.color = ''; }, 2000);
@@ -1637,7 +1632,7 @@ async function renameGroup() {
 
 async function removeMember(userId) {
     if (!currentGroupId || !db) return;
-    if (!confirm('להסיר את החבר מהקבוצה?')) return;
+    if (!confirm(t('groupSettings.kickConfirm'))) return;
     const updates = {};
     updates[`groups/${currentGroupId}/members/${userId}`] = null;
     updates[`bets/${currentGroupId}/${userId}`] = null;
@@ -1651,10 +1646,10 @@ async function leaveGroup() {
     if (!currentGroupId || !db || !currentUser) return;
     const g = userGroups[currentGroupId];
     if (g && g.ownerId === currentUser.userId) {
-        alert('מנהל הקבוצה אינו יכול לעזוב — מחק את הקבוצה במקום זאת.');
+        alert(t('groupSettings.leaveOwner'));
         return;
     }
-    if (!confirm('לעזוב את הקבוצה?')) return;
+    if (!confirm(t('groupSettings.leaveConfirm'))) return;
     const updates = {};
     updates[`groups/${currentGroupId}/members/${currentUser.userId}`] = null;
     updates[`bets/${currentGroupId}/${currentUser.userId}`] = null;
@@ -1669,7 +1664,7 @@ async function deleteGroup() {
     if (!currentGroupId || !db || !currentUser) return;
     const g = userGroups[currentGroupId];
     if (!g || g.ownerId !== currentUser.userId) return;
-    if (!confirm(`למחוק את הקבוצה "${g.name}" לצמיתות? כל הניחושים של חבריה יאבדו.`)) return;
+    if (!confirm(t('groupSettings.deleteConfirm', g.name))) return;
 
     const gid = currentGroupId;
     // Collect member ids
@@ -1692,18 +1687,18 @@ async function deleteGroup() {
 function copyToClipboard(text, btn) {
     const oldLabel = btn.textContent;
     const done = () => {
-        btn.textContent = 'הועתק ✓';
+        btn.textContent = t('common.copied');
         setTimeout(() => { btn.textContent = oldLabel; }, 1500);
     };
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(done).catch(() => done());
     } else {
-        const t = document.createElement('textarea');
-        t.value = text;
-        document.body.appendChild(t);
-        t.select();
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
         try { document.execCommand('copy'); } catch(e) {}
-        document.body.removeChild(t);
+        document.body.removeChild(ta);
         done();
     }
 }

@@ -1217,3 +1217,43 @@ section { display: block; }
     .my-bet-score { font-size: 1.1rem; }
     .btn-save-bet { font-size: .78rem; padding: 6px 10px; }
 }
+
+/* ==========================================
+   LANGUAGE TOGGLE
+   ========================================== */
+
+.login-lang-toggle {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    margin-bottom: 12px;
+}
+.lang-toggle-inline {
+    display: inline-flex;
+    gap: 4px;
+    margin-inline-end: 8px;
+}
+.lang-toggle-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    background: var(--surface, #fff);
+    color: var(--text-light);
+    border-radius: 999px;
+    font-size: .75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .15s;
+    min-width: 34px;
+}
+.lang-toggle-btn:hover { background: var(--bg, #f3f4f6); color: var(--text); }
+.lang-toggle-btn.active {
+    background: var(--primary, #2563eb);
+    color: #fff;
+    border-color: var(--primary, #2563eb);
+}
+.lang-ltr { direction: ltr; }
+.lang-ltr .app-bar-user { flex-direction: row-reverse; }
+
+@media (max-width: 420px) {
+    .lang-toggle-btn { padding: 3px 7px; font-size: .7rem; min-width: 28px; }
+}
