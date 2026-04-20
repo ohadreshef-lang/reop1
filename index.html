@@ -6,11 +6,11 @@
     <title>ניחושי מונדיאל 2026 ⚽</title>
     <meta property="og:title" content="ניחושי מונדיאל 2026">
     <meta property="og:description" content="נחש את התוצאות, תתחרה עם החברים!">
-    <link rel="stylesheet" href="styles.css?v=20260419b">
+    <link rel="stylesheet" href="styles.css?v=20260420e">
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <script src="firebase-config.js"></script>
-    <script src="i18n.js?v=20260419b"></script>
+    <script src="i18n.js?v=20260420e"></script>
 </head>
 <body>
 
@@ -92,6 +92,7 @@
                         <div class="group-switch-divider"></div>
                         <button class="group-switch-action" id="btn-open-create-group" type="button" data-i18n="groupSwitch.createGroup">➕ קבוצה חדשה</button>
                         <button class="group-switch-action" id="btn-open-join-group" type="button" data-i18n="groupSwitch.joinGroup">🔗 הצטרף עם קוד</button>
+                        <button class="group-switch-action hidden" id="btn-share-active-group" type="button" data-i18n="groupSwitch.shareActive">📤 שתף קבוצה נוכחית</button>
                         <button class="group-switch-action hidden" id="btn-open-group-settings" type="button" data-i18n="groupSwitch.settings">⚙️ הגדרות קבוצה</button>
                     </div>
                 </div>
@@ -167,6 +168,12 @@
                 </div>
             </div>
         </main>
+
+        <footer class="app-footer">
+            <button id="btn-open-rules" class="btn-text" type="button" data-i18n="footer.rules">📖 חוקי המשחק</button>
+            <span class="footer-sep">·</span>
+            <span class="footer-copy">⚽ Mondial 2026</span>
+        </footer>
     </section>
 
     <!-- ===== ADMIN PANEL ===== -->
@@ -458,6 +465,17 @@
         </div>
     </div>
 
-    <script src="app.js?v=20260420c"></script>
+    <!-- ===== MODAL: Rules ===== -->
+    <div id="rules-modal" class="modal-overlay hidden">
+        <div class="modal-card modal-card-wide">
+            <h3 data-i18n="rules.title">📖 חוקי המשחק</h3>
+            <div class="rules-body" id="rules-body"></div>
+            <div class="modal-actions">
+                <button id="btn-close-rules" class="btn btn-primary" data-i18n="common.close">סגור</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js?v=20260420e"></script>
 </body>
 </html>

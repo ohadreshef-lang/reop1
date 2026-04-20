@@ -1274,6 +1274,48 @@ section { display: block; }
 .lang-ltr { direction: ltr; }
 .lang-ltr .app-bar-user { flex-direction: row-reverse; }
 
+/* ===== Footer ===== */
+.app-footer {
+    max-width: 680px;
+    margin: 24px auto 0;
+    padding: 16px;
+    text-align: center;
+    color: var(--text-light);
+    font-size: .85rem;
+    border-top: 1px solid var(--border);
+}
+.app-footer .btn-text { text-decoration: underline; }
+.footer-sep { margin: 0 8px; opacity: .5; }
+
+/* ===== Rules modal ===== */
+.modal-card-wide { max-width: 560px; }
+.rules-body {
+    max-height: 65vh;
+    overflow-y: auto;
+    text-align: start;
+    line-height: 1.65;
+    font-size: .92rem;
+    padding: 4px 2px;
+}
+.rules-body h4 {
+    margin: 14px 0 6px;
+    color: var(--primary, #2563eb);
+    font-size: 1rem;
+}
+.rules-body h4:first-child { margin-top: 0; }
+.rules-body ul { padding-inline-start: 22px; margin: 4px 0 8px; }
+.rules-body li { margin-bottom: 4px; }
+.rules-body .rule-points {
+    display: inline-block;
+    background: var(--green-light, #d1fae5);
+    color: #065f46;
+    font-weight: 700;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: .8rem;
+    margin-inline-end: 4px;
+}
+
 /* ===== Admin user group badges ===== */
 .admin-user-groups {
     margin-top: 6px;

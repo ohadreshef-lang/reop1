@@ -24,6 +24,51 @@ const TRANSLATIONS = {
         'common.enter': 'כנס',
         'common.backToApp': 'חזרה לאפליקציה',
 
+        // Footer + rules
+        'footer.rules': '📖 חוקי המשחק',
+        'rules.title': '📖 חוקי המשחק',
+        'rules.html': `
+            <h4>🎯 איך משחקים?</h4>
+            <p>לפני כל משחק של המונדיאל אתה מנחש את התוצאה המדויקת (מספר השערים של כל קבוצה). מערכת הניקוד מזכה אותך אוטומטית ברגע שהמנהל מזין את התוצאה האמיתית.</p>
+
+            <h4>🏆 מערכת הניקוד</h4>
+            <ul>
+                <li><span class="rule-points">3 נק'</span> תוצאה מדויקת (גם התוצאה הסופית וגם מספר השערים של כל קבוצה נכונים)</li>
+                <li><span class="rule-points">1 נק'</span> רק הקבוצה המנצחת (או תיקו) נכונה – התוצאה שגויה</li>
+                <li><span class="rule-points">0 נק'</span> ניחוש שגוי או ללא ניחוש</li>
+            </ul>
+
+            <h4>🏅 ניחושי טורניר</h4>
+            <ul>
+                <li><span class="rule-points">10 נק'</span> ניחוש נכון של אלופת הטורניר</li>
+                <li><span class="rule-points">10 נק'</span> ניחוש נכון של מלך השערים (הבועט הטוב ביותר)</li>
+            </ul>
+            <p>ניחושי הטורניר נסגרים <b>שעה לפני פתיחת משחק הפתיחה</b> של המונדיאל ולא ניתנים לשינוי לאחר מכן.</p>
+
+            <h4>⏰ מתי נסגרים הניחושים?</h4>
+            <p>כל ניחוש נסגר אוטומטית <b>שעה לפני שריקת הפתיחה</b> של המשחק. לא ניתן להזין או לשנות ניחוש אחרי זמן זה — בטאב "משחקים" רואים שעון שסופר אחורה לכל משחק.</p>
+
+            <h4>👥 קבוצות וחברים</h4>
+            <ul>
+                <li>כל משתמש יכול ליצור קבוצה פרטית או להצטרף לקבוצה קיימת עם קוד הזמנה בן 6 תווים</li>
+                <li>אפשר להיות חבר בכמה קבוצות במקביל — הניחושים נפרדים לכל קבוצה</li>
+                <li>טבלת הדירוג מוצגת רק בין חברי הקבוצה הנוכחית</li>
+                <li>בעל הקבוצה יכול לשנות את השם, להעלות לוגו, להסיר חברים ולמחוק את הקבוצה</li>
+            </ul>
+
+            <h4>🔗 שיתוף קבוצה</h4>
+            <p>הכפתור 🔗 ליד כל קבוצה פותח את תפריט השיתוף של המכשיר (WhatsApp, Telegram, Messages ועוד) עם קישור ישיר שמצרף את החבר לקבוצה ברגע שהוא נכנס.</p>
+
+            <h4>ℹ️ עוד דברים שכדאי לדעת</h4>
+            <ul>
+                <li>משחקי שלב הבתים נטענים מראש. משחקי הנוקאאוט מתווספים ברגע שהמשתתפים מתבררים</li>
+                <li>בטאב "הניחושים שלי" תראה את כל ההימורים שלך במקום אחד</li>
+                <li>אפשר לעבור בכל רגע בין עברית, אנגלית וספרדית דרך הדרופ-דאון למעלה</li>
+            </ul>
+
+            <p style="margin-top:14px;color:#666;font-size:.8rem">⚽ בהצלחה וכיף מהמונדיאל!</p>
+        `,
+
         // Login
         'login.title': 'ניחושי מונדיאל 2026',
         'login.subtitle': 'נחש תוצאות, צבור נקודות, תתחרה עם החברים!',
@@ -42,6 +87,7 @@ const TRANSLATIONS = {
         'groupSwitch.createGroup': '➕ קבוצה חדשה',
         'groupSwitch.joinGroup': '🔗 הצטרף עם קוד',
         'groupSwitch.share': 'שתף קבוצה',
+        'groupSwitch.shareActive': '📤 שתף קבוצה נוכחית',
         'groupSwitch.shareTitle': (name) => `הצטרף לקבוצה ${name}`,
         'groupSwitch.shareText': (name, code) => `הוזמנת להצטרף לקבוצת הניחושים "${name}" במונדיאל 2026. קוד הזמנה: ${code}`,
         'groupSwitch.shareCopied': 'הקישור הועתק! שלח אותו לחברים',
@@ -251,6 +297,50 @@ const TRANSLATIONS = {
         'common.enter': 'Enter',
         'common.backToApp': 'Back to app',
 
+        'footer.rules': '📖 Game rules',
+        'rules.title': '📖 Game rules',
+        'rules.html': `
+            <h4>🎯 How to play</h4>
+            <p>Before every World Cup match you predict the exact score (goals for each team). Points are awarded automatically once the admin enters the real result.</p>
+
+            <h4>🏆 Scoring</h4>
+            <ul>
+                <li><span class="rule-points">3 pts</span> Exact score (both teams' goal counts correct)</li>
+                <li><span class="rule-points">1 pt</span> Correct winner (or draw) but wrong score</li>
+                <li><span class="rule-points">0 pts</span> Wrong prediction or no prediction</li>
+            </ul>
+
+            <h4>🏅 Tournament predictions</h4>
+            <ul>
+                <li><span class="rule-points">10 pts</span> Correct World Cup champion</li>
+                <li><span class="rule-points">10 pts</span> Correct top scorer (Golden Boot)</li>
+            </ul>
+            <p>Tournament predictions lock <b>1 hour before the opening match</b> and cannot be changed afterwards.</p>
+
+            <h4>⏰ When do predictions lock?</h4>
+            <p>Every prediction locks automatically <b>1 hour before kickoff</b>. You can't submit or change a bet after that time — the Matches tab shows a live countdown for each match.</p>
+
+            <h4>👥 Groups and members</h4>
+            <ul>
+                <li>Anyone can create a private group or join an existing one with a 6-character invite code</li>
+                <li>You can be in multiple groups at once — bets are tracked independently per group</li>
+                <li>The leaderboard only shows members of the currently active group</li>
+                <li>The group owner can rename, upload a logo, remove members, and delete the group</li>
+            </ul>
+
+            <h4>🔗 Sharing a group</h4>
+            <p>The 🔗 button next to any group opens your device's share sheet (WhatsApp, Telegram, Messages, etc.) with a direct join link — friends are added to the group as soon as they open it and log in.</p>
+
+            <h4>ℹ️ Other things worth knowing</h4>
+            <ul>
+                <li>Group-stage matches are loaded in advance. Knockout matches are added once the participants are decided</li>
+                <li>The "My bets" tab shows all your predictions in one place</li>
+                <li>You can switch between Hebrew, English and Spanish any time from the dropdown at the top</li>
+            </ul>
+
+            <p style="margin-top:14px;color:#666;font-size:.8rem">⚽ Good luck and enjoy the World Cup!</p>
+        `,
+
         'login.title': 'World Cup 2026 Predictions',
         'login.subtitle': 'Predict scores, earn points, compete with friends!',
         'login.nameLabel': 'Full name',
@@ -266,6 +356,7 @@ const TRANSLATIONS = {
         'groupSwitch.createGroup': '➕ New group',
         'groupSwitch.joinGroup': '🔗 Join with code',
         'groupSwitch.share': 'Share group',
+        'groupSwitch.shareActive': '📤 Share current group',
         'groupSwitch.shareTitle': (name) => `Join ${name}`,
         'groupSwitch.shareText': (name, code) => `You're invited to join "${name}" on Mondial 2026. Invite code: ${code}`,
         'groupSwitch.shareCopied': 'Link copied! Send it to your friends',
@@ -463,6 +554,50 @@ const TRANSLATIONS = {
         'common.enter': 'Entrar',
         'common.backToApp': 'Volver a la app',
 
+        'footer.rules': '📖 Reglas del juego',
+        'rules.title': '📖 Reglas del juego',
+        'rules.html': `
+            <h4>🎯 Cómo jugar</h4>
+            <p>Antes de cada partido del Mundial, predice el resultado exacto (goles de cada equipo). Los puntos se otorgan automáticamente cuando el administrador ingresa el resultado real.</p>
+
+            <h4>🏆 Puntuación</h4>
+            <ul>
+                <li><span class="rule-points">3 pts</span> Resultado exacto (goles de ambos equipos correctos)</li>
+                <li><span class="rule-points">1 pt</span> Ganador correcto (o empate) pero resultado incorrecto</li>
+                <li><span class="rule-points">0 pts</span> Predicción incorrecta o sin predicción</li>
+            </ul>
+
+            <h4>🏅 Predicciones del torneo</h4>
+            <ul>
+                <li><span class="rule-points">10 pts</span> Campeón del Mundial correcto</li>
+                <li><span class="rule-points">10 pts</span> Goleador correcto (Bota de Oro)</li>
+            </ul>
+            <p>Las predicciones del torneo se cierran <b>1 hora antes del partido inaugural</b> y no se pueden cambiar después.</p>
+
+            <h4>⏰ ¿Cuándo se cierran las predicciones?</h4>
+            <p>Cada predicción se cierra automáticamente <b>1 hora antes del inicio</b> del partido. No se puede enviar ni cambiar una apuesta después de ese momento — la pestaña "Partidos" muestra una cuenta atrás en vivo.</p>
+
+            <h4>👥 Grupos y miembros</h4>
+            <ul>
+                <li>Cualquiera puede crear un grupo privado o unirse a uno existente con un código de 6 caracteres</li>
+                <li>Puedes estar en varios grupos — las apuestas son independientes por grupo</li>
+                <li>La clasificación solo muestra a los miembros del grupo activo</li>
+                <li>El dueño del grupo puede renombrar, subir un logo, quitar miembros y eliminar el grupo</li>
+            </ul>
+
+            <h4>🔗 Compartir un grupo</h4>
+            <p>El botón 🔗 junto a cada grupo abre el menú para compartir de tu dispositivo (WhatsApp, Telegram, Mensajes, etc.) con un enlace directo que añade a tus amigos al grupo al abrirlo.</p>
+
+            <h4>ℹ️ Otras cosas útiles</h4>
+            <ul>
+                <li>Los partidos de la fase de grupos se cargan con antelación. Los de eliminatorias se añaden cuando se conocen los equipos</li>
+                <li>La pestaña "Mis apuestas" muestra todas tus predicciones en un solo lugar</li>
+                <li>Puedes cambiar entre hebreo, inglés y español desde el menú desplegable superior</li>
+            </ul>
+
+            <p style="margin-top:14px;color:#666;font-size:.8rem">⚽ ¡Buena suerte y disfruta del Mundial!</p>
+        `,
+
         'login.title': 'Predicciones Mundial 2026',
         'login.subtitle': '¡Predice resultados, suma puntos, compite con amigos!',
         'login.nameLabel': 'Nombre completo',
@@ -478,6 +613,7 @@ const TRANSLATIONS = {
         'groupSwitch.createGroup': '➕ Nuevo grupo',
         'groupSwitch.joinGroup': '🔗 Unirse con código',
         'groupSwitch.share': 'Compartir grupo',
+        'groupSwitch.shareActive': '📤 Compartir grupo actual',
         'groupSwitch.shareTitle': (name) => `Únete a ${name}`,
         'groupSwitch.shareText': (name, code) => `Estás invitado a unirte al grupo "${name}" en Mondial 2026. Código: ${code}`,
         'groupSwitch.shareCopied': '¡Enlace copiado! Envíaselo a tus amigos',

@@ -1603,6 +1603,11 @@ function renderGroupSwitcher() {
         if (active) settingsBtn.classList.remove('hidden');
         else settingsBtn.classList.add('hidden');
     }
+    const shareActiveBtn = $('btn-share-active-group');
+    if (shareActiveBtn) {
+        if (active) shareActiveBtn.classList.remove('hidden');
+        else shareActiveBtn.classList.add('hidden');
+    }
 
     // Menu list
     const list = $('group-switch-list');
@@ -1997,6 +2002,27 @@ function setupGroupUIListeners() {
         toggleGroupSwitchMenu(false);
         openGroupSettingsModal();
     });
+    const shareActiveBtn = $('btn-share-active-group');
+    if (shareActiveBtn) {
+        shareActiveBtn.addEventListener('click', () => {
+            toggleGroupSwitchMenu(false);
+            if (currentGroupId) shareGroupLink(currentGroupId);
+        });
+    }
+    const openRulesBtn = $('btn-open-rules');
+    if (openRulesBtn) {
+        openRulesBtn.addEventListener('click', () => {
+            const body = $('rules-body');
+            if (body) body.innerHTML = t('rules.html');
+            $('rules-modal').classList.remove('hidden');
+        });
+    }
+    const closeRulesBtn = $('btn-close-rules');
+    if (closeRulesBtn) {
+        closeRulesBtn.addEventListener('click', () => {
+            $('rules-modal').classList.add('hidden');
+        });
+    }
 
     // Group picker screen
     $('btn-picker-create').addEventListener('click', openCreateGroupModal);
