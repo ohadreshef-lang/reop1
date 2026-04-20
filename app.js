@@ -1501,21 +1501,29 @@ const SEED_MATCHES = [
     { team1:'TBD', team2:'TBD', date:'2026-07-18T22:00', stage:'3rd', group: null },
 ];
 
+function seedMatchKey(m) {
+    // Stable, deterministic key so reseeding is idempotent.
+    // Firebase keys can't contain . # $ [ ] /
+    const raw = `${m.stage}_${m.group || '-'}_${m.date}_${m.team1}_vs_${m.team2}`;
+    return raw.replace(/[.#$\[\]\/]/g, '_');
+}
+
 async function adminSeedMatches() {
     if (!db) { alert('Firebase לא מחובר'); return; }
 
     const snap = await ref('matches').once('value');
-    if (snap.exists() && Object.keys(snap.val()).length > 0) {
-        if (!confirm('כבר קיימים משחקים. להוסיף את משחקי שלב הבתים בנוסף?')) return;
-    }
+    const existing = snap.val() || {};
+    const existingKeys = new Set(Object.keys(existing));
 
-    let total = 0;
+    let added = 0, skipped = 0;
     for (const m of SEED_MATCHES) {
-        await ref('matches').push({ ...m, status: 'upcoming', result: null });
-        total++;
+        const key = seedMatchKey(m);
+        if (existingKeys.has(key)) { skipped++; continue; }
+        await ref(`matches/${key}`).set({ ...m, status: 'upcoming', result: null });
+        added++;
     }
 
-    alert(`נטענו ${total} משחקי שלב הבתים בהצלחה! ✅\nמשחקי שלב הנוקאאוט יתווספו לאחר שתוצאות הבתים ייקבעו.`);
+    alert(`נטענו ${added} משחקים חדשים ✅\n${skipped} משחקים קיימים נשמרו ללא שינוי (כולל תוצאות).\n\nמשחקי שלב הנוקאאוט יתווספו לאחר שתוצאות הבתים ייקבעו.`);
 }
 
 
