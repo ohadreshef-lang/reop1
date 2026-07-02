@@ -213,8 +213,13 @@ export function classifyMatches({ matches, apiMatches, now, staleMinutes = 180, 
 
         if (am.status === 'FINISHED' && ft && ft.home !== null && ft.away !== null) {
             if (hasResult) {
-                // Re-finalize only if the authoritative score actually changed.
-                if (g1 !== m.result.team1Goals || g2 !== m.result.team2Goals) {
+                // g1/g2 are football-data's full-time TOTAL. For a knockout game already
+                // reconciled to its after-extra-time total, compare against resultAet — the
+                // stored `result` is the 90' score, which always differs from the FD total for
+                // an ET game and would re-trigger (and risk clobbering) every cycle.
+                const cmp = (isKnockoutStage(m.stage) && m.resultAet) ? m.resultAet : m.result;
+                // Re-finalize only if the authoritative total actually changed (e.g. a VAR fix).
+                if (g1 !== cmp.team1Goals || g2 !== cmp.team2Goals) {
                     finished.push({ matchId, m, g1, g2 });
                 }
             } else {
@@ -251,7 +256,14 @@ export function buildResultUpdates({ finished, live, groups, bets, specialBets, 
         updates[`matches/${matchId}/status`] = 'completed';
         updates[`matches/${matchId}/finishedAt`] = now;
         updates[`matches/${matchId}/live`] = null;
-        if (split.resultAet) updates[`matches/${matchId}/resultAet`] = split.resultAet;
+        if (split.resultAet) {
+            updates[`matches/${matchId}/resultAet`] = split.resultAet;
+        } else if (isKnockoutStage(m.stage) && Array.isArray(m.scorers)
+                   && m.scorers.some(s => s && typeof s.minute === 'number' && s.minute > 90)) {
+            // ET goals present but the 90' split was skipped (scorer count != FD total, e.g. a
+            // penalty shootout or a missed goal). Scored on the full total — flag for review.
+            console.warn(`[finalize] ${matchId}: knockout has extra-time goals but scorer count (${m.scorers.length}) != total (${g1 + g2}); scored on full total ${g1}-${g2} — review the 90' result manually.`);
+        }
     }
 
     const scored = finished.filter(f => !f.m.noPoints);

@@ -138,6 +138,39 @@ test('classifyMatches: does NOT re-finalize past the window', () => {
   assert.equal(finished.length, 0);
 });
 
+// Regression guard: a knockout game reconciled to 90' result={2,2} + resultAet={3,2}.
+// FD returns its full-time total (3-2) — must NOT re-finalize (the 90' result is correct).
+test('classifyMatches: knockout with resultAet does NOT re-finalize when FD total equals resultAet', () => {
+  const matches = { ko: { team1: 'אנגליה', team2: 'קרואטיה', date: '2026-06-17T20:00', stage: 'R32',
+    result: { team1Goals: 2, team2Goals: 2 },
+    resultAet: { team1Goals: 3, team2Goals: 2 },
+    finishedAt: Date.parse('2026-06-17T22:00:00Z') } };
+  const now = Date.parse('2026-06-17T22:30:00Z'); // within 6h window
+  // FD returns full-time total 3-2 (after ET) — same as resultAet, no real change
+  const apiMatchesKo = [{ id: 1, status: 'FINISHED', utcDate: '2026-06-17T20:00:00Z',
+    homeTeam: { name: 'England' }, awayTeam: { name: 'Croatia' },
+    score: { duration: 'EXTRA_TIME', fullTime: { home: 3, away: 2 } } }];
+  const { finished } = classifyMatches({ matches, apiMatches: apiMatchesKo, now, refinalizeWindowMs: 6 * 3600 * 1000 });
+  assert.equal(finished.length, 0); // must NOT clobber the correctly stored 90' result
+});
+
+// If FD returns a genuinely different total (e.g. a VAR correction), re-finalize must still fire.
+test('classifyMatches: knockout with resultAet DOES re-finalize when FD total is genuinely different', () => {
+  const matches = { ko: { team1: 'אנגליה', team2: 'קרואטיה', date: '2026-06-17T20:00', stage: 'R32',
+    result: { team1Goals: 2, team2Goals: 2 },
+    resultAet: { team1Goals: 3, team2Goals: 2 },
+    finishedAt: Date.parse('2026-06-17T22:00:00Z') } };
+  const now = Date.parse('2026-06-17T22:30:00Z'); // within 6h window
+  // FD now returns 4-2 (VAR added a goal) — different from resultAet 3-2
+  const apiMatchesKo = [{ id: 1, status: 'FINISHED', utcDate: '2026-06-17T20:00:00Z',
+    homeTeam: { name: 'England' }, awayTeam: { name: 'Croatia' },
+    score: { duration: 'EXTRA_TIME', fullTime: { home: 4, away: 2 } } }];
+  const { finished } = classifyMatches({ matches, apiMatches: apiMatchesKo, now, refinalizeWindowMs: 6 * 3600 * 1000 });
+  assert.equal(finished.length, 1); // genuine correction must flow through
+  assert.equal(finished[0].g1, 4);
+  assert.equal(finished[0].g2, 2);
+});
+
 test('buildResultUpdates: scorers persisted to matches/{id}/scorers, not in the live node', () => {
   const now = 1750000000000;
   const withScorers = [{ matchId: 'm_live', m: { team1: 'גאנה', team2: 'פנמה' }, g1: 1, g2: 0, status: 'IN_PLAY',
