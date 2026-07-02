@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyMatches, buildResultUpdates, parseMatchDate, calcPoints, isKnockoutStage, espnMinute, mapEspnLive, parseEspnGoals } from '../scripts/lib/results-core.mjs';
+import { classifyMatches, buildResultUpdates, parseMatchDate, calcPoints, isKnockoutStage, espnMinute, mapEspnLive, parseEspnGoals, splitKnockoutResult } from '../scripts/lib/results-core.mjs';
 
 const now = Date.parse('2026-06-17T22:30:00Z'); // 2.5h after the 20:00Z kickoff
 
@@ -138,6 +138,39 @@ test('classifyMatches: does NOT re-finalize past the window', () => {
   assert.equal(finished.length, 0);
 });
 
+// Regression guard: a knockout game reconciled to 90' result={2,2} + resultAet={3,2}.
+// FD returns its full-time total (3-2) — must NOT re-finalize (the 90' result is correct).
+test('classifyMatches: knockout with resultAet does NOT re-finalize when FD total equals resultAet', () => {
+  const matches = { ko: { team1: 'אנגליה', team2: 'קרואטיה', date: '2026-06-17T20:00', stage: 'R32',
+    result: { team1Goals: 2, team2Goals: 2 },
+    resultAet: { team1Goals: 3, team2Goals: 2 },
+    finishedAt: Date.parse('2026-06-17T22:00:00Z') } };
+  const now = Date.parse('2026-06-17T22:30:00Z'); // within 6h window
+  // FD returns full-time total 3-2 (after ET) — same as resultAet, no real change
+  const apiMatchesKo = [{ id: 1, status: 'FINISHED', utcDate: '2026-06-17T20:00:00Z',
+    homeTeam: { name: 'England' }, awayTeam: { name: 'Croatia' },
+    score: { duration: 'EXTRA_TIME', fullTime: { home: 3, away: 2 } } }];
+  const { finished } = classifyMatches({ matches, apiMatches: apiMatchesKo, now, refinalizeWindowMs: 6 * 3600 * 1000 });
+  assert.equal(finished.length, 0); // must NOT clobber the correctly stored 90' result
+});
+
+// If FD returns a genuinely different total (e.g. a VAR correction), re-finalize must still fire.
+test('classifyMatches: knockout with resultAet DOES re-finalize when FD total is genuinely different', () => {
+  const matches = { ko: { team1: 'אנגליה', team2: 'קרואטיה', date: '2026-06-17T20:00', stage: 'R32',
+    result: { team1Goals: 2, team2Goals: 2 },
+    resultAet: { team1Goals: 3, team2Goals: 2 },
+    finishedAt: Date.parse('2026-06-17T22:00:00Z') } };
+  const now = Date.parse('2026-06-17T22:30:00Z'); // within 6h window
+  // FD now returns 4-2 (VAR added a goal) — different from resultAet 3-2
+  const apiMatchesKo = [{ id: 1, status: 'FINISHED', utcDate: '2026-06-17T20:00:00Z',
+    homeTeam: { name: 'England' }, awayTeam: { name: 'Croatia' },
+    score: { duration: 'EXTRA_TIME', fullTime: { home: 4, away: 2 } } }];
+  const { finished } = classifyMatches({ matches, apiMatches: apiMatchesKo, now, refinalizeWindowMs: 6 * 3600 * 1000 });
+  assert.equal(finished.length, 1); // genuine correction must flow through
+  assert.equal(finished[0].g1, 4);
+  assert.equal(finished[0].g2, 2);
+});
+
 test('buildResultUpdates: scorers persisted to matches/{id}/scorers, not in the live node', () => {
   const now = 1750000000000;
   const withScorers = [{ matchId: 'm_live', m: { team1: 'גאנה', team2: 'פנמה' }, g1: 1, g2: 0, status: 'IN_PLAY',
@@ -252,4 +285,53 @@ test('mapEspnLive: alias teams resolve (Congo DR)', () => {
   assert.ok(congoEntry, 'Congo DR match should be in live results');
   assert.equal(congoEntry.g1, 2);
   assert.equal(congoEntry.g2, 1);
+});
+
+// --- splitKnockoutResult ---------------------------------------------------
+
+test('splitKnockoutResult: group stage never splits', () => {
+  const scorers = [{ team: 1, minute: 120 }];
+  assert.deepEqual(splitKnockoutResult({ stage: 'group', g1: 3, g2: 2, scorers }),
+    { result: { team1Goals: 3, team2Goals: 2 }, resultAet: null });
+});
+
+test('splitKnockoutResult: knockout with no ET goals -> no split', () => {
+  const scorers = [{ team: 1, minute: 20 }, { team: 1, minute: 80 }, { team: 2, minute: 55 }];
+  assert.deepEqual(splitKnockoutResult({ stage: 'R32', g1: 2, g2: 1, scorers }),
+    { result: { team1Goals: 2, team2Goals: 1 }, resultAet: null });
+});
+
+test('splitKnockoutResult: knockout ET goal splits 90 vs a.e.t. (Belgium-Senegal)', () => {
+  const scorers = [
+    { team: 2, minute: 25 }, { team: 2, minute: 51 },
+    { team: 1, minute: 86 }, { team: 1, minute: 89 }, { team: 1, minute: 120 },
+  ];
+  assert.deepEqual(splitKnockoutResult({ stage: 'R32', g1: 3, g2: 2, scorers }),
+    { result: { team1Goals: 2, team2Goals: 2 }, resultAet: { team1Goals: 3, team2Goals: 2 } });
+});
+
+test('splitKnockoutResult: ET goals but scorer count != total (penalty/missed) -> no split', () => {
+  const scorers = [{ team: 1, minute: 120 }]; // only 1 scorer but total says 2
+  assert.deepEqual(splitKnockoutResult({ stage: 'SF', g1: 1, g2: 1, scorers }),
+    { result: { team1Goals: 1, team2Goals: 1 }, resultAet: null });
+});
+
+test('splitKnockoutResult: et count exceeding a team total -> no split (guard)', () => {
+  const scorers = [{ team: 1, minute: 100 }, { team: 1, minute: 110 }]; // et1=2 but g1=1
+  assert.deepEqual(splitKnockoutResult({ stage: 'QF', g1: 1, g2: 1, scorers }),
+    { result: { team1Goals: 1, team2Goals: 1 }, resultAet: null });
+});
+
+test('buildResultUpdates: knockout ET game scores on 90-minute result + writes resultAet', () => {
+  const now = Date.parse('2026-07-01T23:00:00Z');
+  const m = { team1: 'A', team2: 'B', date: '2026-07-01T20:00', stage: 'R32',
+    scorers: [{ team: 2, minute: 25 }, { team: 2, minute: 51 }, { team: 1, minute: 86 }, { team: 1, minute: 89 }, { team: 1, minute: 120 }] };
+  const finished = [{ matchId: 'ko', m, g1: 3, g2: 2 }];
+  const groups = { g1: { members: { u1: {}, u2: {} } } };
+  const bets = { g1: { u1: { ko: { team1Goals: 1, team2Goals: 1 } }, u2: { ko: { team1Goals: 3, team2Goals: 2 } } } };
+  const updates = buildResultUpdates({ finished, live: [], groups, bets, specialBets: {}, now });
+  assert.deepEqual(updates['matches/ko/result'], { team1Goals: 2, team2Goals: 2 });   // 90'
+  assert.deepEqual(updates['matches/ko/resultAet'], { team1Goals: 3, team2Goals: 2 }); // 120'
+  assert.equal(updates['bets/g1/u1/ko/points'], 2);   // 1-1 vs 2-2 draw -> knockout direction = 2
+  assert.equal(updates['bets/g1/u2/ko/points'], 0);   // 3-2 vs 2-2 -> wrong (win1 vs draw) = 0
 });

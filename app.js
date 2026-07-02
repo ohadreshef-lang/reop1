@@ -1199,7 +1199,9 @@ function buildMatchCard(m) {
     let middleHtml = '';
     let betAreaHtml = '';
     if (hasResult) {
-        middleHtml = `<div class="result-score">${m.result.team1Goals} – ${m.result.team2Goals}</div>`;
+        middleHtml = `<div class="result-score">${m.result.team1Goals} – ${m.result.team2Goals}</div>`
+            + (m.resultAet && (m.resultAet.team1Goals !== m.result.team1Goals || m.resultAet.team2Goals !== m.result.team2Goals)
+                ? `<div class="result-aet">${t('match.aet')} ${m.resultAet.team1Goals}–${m.resultAet.team2Goals}</div>` : '');
     } else if (locked) {
         if (bet) {
             middleHtml = `
