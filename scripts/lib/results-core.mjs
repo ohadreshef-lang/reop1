@@ -63,6 +63,21 @@ export function calcPoints(b1, b2, r1, r2, stage) {
     return 0;
 }
 
+// Split a finished knockout score into the 90-minute result (scored) and the after-extra-time
+// result (display). g1/g2 are football-data's authoritative full-time total; ESPN scorers'
+// minutes identify extra-time goals (minute > 90). Only splits for knockout games with ET goals
+// when the goal count agrees with the total (high confidence); otherwise returns the total with
+// no a.e.t. (group games, normal-time games, or ambiguous data like penalty shootouts).
+export function splitKnockoutResult({ stage, g1, g2, scorers }) {
+    const result = { team1Goals: g1, team2Goals: g2 };
+    if (!isKnockoutStage(stage) || !Array.isArray(scorers)) return { result, resultAet: null };
+    const et1 = scorers.filter(s => s && s.team === 1 && typeof s.minute === 'number' && s.minute > 90).length;
+    const et2 = scorers.filter(s => s && s.team === 2 && typeof s.minute === 'number' && s.minute > 90).length;
+    if (et1 + et2 === 0) return { result, resultAet: null };
+    if (et1 > g1 || et2 > g2 || scorers.length !== g1 + g2) return { result, resultAet: null };
+    return { result: { team1Goals: g1 - et1, team2Goals: g2 - et2 }, resultAet: { team1Goals: g1, team2Goals: g2 } };
+}
+
 // --- ESPN live source (in-play scores + goal events) ----------------------
 
 // Parse an ESPN displayClock ("29'", "45'+2'") to {minute, extra}.
@@ -227,11 +242,16 @@ export function buildResultUpdates({ finished, live, groups, bets, specialBets, 
         updates[`matches/${matchId}/scorers`] = Array.isArray(scorers) ? scorers : [];
     }
 
-    for (const { matchId, g1, g2 } of finished) {
-        updates[`matches/${matchId}/result`] = { team1Goals: g1, team2Goals: g2 };
+    for (const f of finished) {
+        const { matchId, m, g1, g2 } = f;
+        const split = splitKnockoutResult({ stage: m.stage, g1, g2, scorers: m.scorers });
+        f.r1 = split.result.team1Goals;   // 90-minute score — used by the points loop below
+        f.r2 = split.result.team2Goals;
+        updates[`matches/${matchId}/result`] = split.result;
         updates[`matches/${matchId}/status`] = 'completed';
         updates[`matches/${matchId}/finishedAt`] = now;
         updates[`matches/${matchId}/live`] = null;
+        if (split.resultAet) updates[`matches/${matchId}/resultAet`] = split.resultAet;
     }
 
     const scored = finished.filter(f => !f.m.noPoints);
@@ -241,14 +261,14 @@ export function buildResultUpdates({ finished, live, groups, bets, specialBets, 
             const members = (groups[groupId] && groups[groupId].members) || {};
             for (const userId of Object.keys(members)) {
                 const userBets = ((allBets[groupId] || {})[userId]) || {};
-                for (const { matchId, g1, g2, m } of scored) {
+                for (const { matchId, r1, r2, m } of scored) {
                     const bet = userBets[matchId];
                     if (!bet) {
-                        const filled = { team1Goals: 0, team2Goals: 0, placedAt: 0, points: calcPoints(0, 0, g1, g2, m.stage) };
+                        const filled = { team1Goals: 0, team2Goals: 0, placedAt: 0, points: calcPoints(0, 0, r1, r2, m.stage) };
                         updates[`bets/${groupId}/${userId}/${matchId}`] = filled;
                         userBets[matchId] = filled;
                     } else {
-                        bet.points = calcPoints(bet.team1Goals, bet.team2Goals, g1, g2, m.stage);
+                        bet.points = calcPoints(bet.team1Goals, bet.team2Goals, r1, r2, m.stage);
                         updates[`bets/${groupId}/${userId}/${matchId}/points`] = bet.points;
                     }
                 }

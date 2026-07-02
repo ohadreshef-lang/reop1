@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyMatches, buildResultUpdates, parseMatchDate, calcPoints, isKnockoutStage, espnMinute, mapEspnLive, parseEspnGoals } from '../scripts/lib/results-core.mjs';
+import { classifyMatches, buildResultUpdates, parseMatchDate, calcPoints, isKnockoutStage, espnMinute, mapEspnLive, parseEspnGoals, splitKnockoutResult } from '../scripts/lib/results-core.mjs';
 
 const now = Date.parse('2026-06-17T22:30:00Z'); // 2.5h after the 20:00Z kickoff
 
@@ -252,4 +252,53 @@ test('mapEspnLive: alias teams resolve (Congo DR)', () => {
   assert.ok(congoEntry, 'Congo DR match should be in live results');
   assert.equal(congoEntry.g1, 2);
   assert.equal(congoEntry.g2, 1);
+});
+
+// --- splitKnockoutResult ---------------------------------------------------
+
+test('splitKnockoutResult: group stage never splits', () => {
+  const scorers = [{ team: 1, minute: 120 }];
+  assert.deepEqual(splitKnockoutResult({ stage: 'group', g1: 3, g2: 2, scorers }),
+    { result: { team1Goals: 3, team2Goals: 2 }, resultAet: null });
+});
+
+test('splitKnockoutResult: knockout with no ET goals -> no split', () => {
+  const scorers = [{ team: 1, minute: 20 }, { team: 1, minute: 80 }, { team: 2, minute: 55 }];
+  assert.deepEqual(splitKnockoutResult({ stage: 'R32', g1: 2, g2: 1, scorers }),
+    { result: { team1Goals: 2, team2Goals: 1 }, resultAet: null });
+});
+
+test('splitKnockoutResult: knockout ET goal splits 90 vs a.e.t. (Belgium-Senegal)', () => {
+  const scorers = [
+    { team: 2, minute: 25 }, { team: 2, minute: 51 },
+    { team: 1, minute: 86 }, { team: 1, minute: 89 }, { team: 1, minute: 120 },
+  ];
+  assert.deepEqual(splitKnockoutResult({ stage: 'R32', g1: 3, g2: 2, scorers }),
+    { result: { team1Goals: 2, team2Goals: 2 }, resultAet: { team1Goals: 3, team2Goals: 2 } });
+});
+
+test('splitKnockoutResult: ET goals but scorer count != total (penalty/missed) -> no split', () => {
+  const scorers = [{ team: 1, minute: 120 }]; // only 1 scorer but total says 2
+  assert.deepEqual(splitKnockoutResult({ stage: 'SF', g1: 1, g2: 1, scorers }),
+    { result: { team1Goals: 1, team2Goals: 1 }, resultAet: null });
+});
+
+test('splitKnockoutResult: et count exceeding a team total -> no split (guard)', () => {
+  const scorers = [{ team: 1, minute: 100 }, { team: 1, minute: 110 }]; // et1=2 but g1=1
+  assert.deepEqual(splitKnockoutResult({ stage: 'QF', g1: 1, g2: 1, scorers }),
+    { result: { team1Goals: 1, team2Goals: 1 }, resultAet: null });
+});
+
+test('buildResultUpdates: knockout ET game scores on 90-minute result + writes resultAet', () => {
+  const now = Date.parse('2026-07-01T23:00:00Z');
+  const m = { team1: 'A', team2: 'B', date: '2026-07-01T20:00', stage: 'R32',
+    scorers: [{ team: 2, minute: 25 }, { team: 2, minute: 51 }, { team: 1, minute: 86 }, { team: 1, minute: 89 }, { team: 1, minute: 120 }] };
+  const finished = [{ matchId: 'ko', m, g1: 3, g2: 2 }];
+  const groups = { g1: { members: { u1: {}, u2: {} } } };
+  const bets = { g1: { u1: { ko: { team1Goals: 1, team2Goals: 1 } }, u2: { ko: { team1Goals: 3, team2Goals: 2 } } } };
+  const updates = buildResultUpdates({ finished, live: [], groups, bets, specialBets: {}, now });
+  assert.deepEqual(updates['matches/ko/result'], { team1Goals: 2, team2Goals: 2 });   // 90'
+  assert.deepEqual(updates['matches/ko/resultAet'], { team1Goals: 3, team2Goals: 2 }); // 120'
+  assert.equal(updates['bets/g1/u1/ko/points'], 2);   // 1-1 vs 2-2 draw -> knockout direction = 2
+  assert.equal(updates['bets/g1/u2/ko/points'], 0);   // 3-2 vs 2-2 -> wrong (win1 vs draw) = 0
 });
