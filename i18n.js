@@ -168,6 +168,7 @@ const TRANSLATIONS = {
         'match.showBreakdown': 'הצג ניחושים של כולם',
         'match.emptyState': 'אין משחקים להצגה. האדמין יכול לטעון את המשחקים.',
         'match.loadingMatches': 'טוען משחקים...',
+        'match.aet': 'אחרי הארכה',
 
         // Leaderboard
         'leaderboard.title': '🏆 טבלת דירוג',
@@ -473,6 +474,7 @@ const TRANSLATIONS = {
         'match.showBreakdown': 'Show everyone\'s bets',
         'match.emptyState': 'No matches to display. An admin can load them.',
         'match.loadingMatches': 'Loading matches...',
+        'match.aet': 'a.e.t.',
 
         'leaderboard.title': '🏆 Leaderboard',
         'leaderboard.scoringExact': 'Exact score = 4 pts',
@@ -769,6 +771,7 @@ const TRANSLATIONS = {
         'match.showBreakdown': 'Ver apuestas de todos',
         'match.emptyState': 'No hay partidos. Un admin puede cargarlos.',
         'match.loadingMatches': 'Cargando partidos...',
+        'match.aet': 'tras la prórroga',
 
         'leaderboard.title': '🏆 Tabla de posiciones',
         'leaderboard.scoringExact': 'Resultado exacto = 4 pts',

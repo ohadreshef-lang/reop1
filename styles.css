@@ -596,6 +596,14 @@ section { display: block; }
     letter-spacing: 2px;
 }
 
+.result-aet {
+    font-size: .72rem;
+    color: #6b7280;
+    font-weight: 600;
+    text-align: center;
+    margin-top: 2px;
+}
+
 /* Bet area below the teams row (steppers + save button) */
 .match-bet-area {
     display: flex;
