@@ -32,7 +32,11 @@ async function main() {
     if (!res.ok) { console.warn(`football-data request failed (HTTP ${res.status}); skipping this run.`); return; }
     const fdMatches = (await res.json()).matches || [];
 
-    const existingMatches = (await (await fetch(`${DB}/${ROOT}/matches.json?auth=${token}`)).json()) || {};
+    // Abort if we can't read the current matches — proceeding with an empty set would
+    // disable the team-pair dedup and risk inserting near-duplicate fixture rows.
+    const existingRes = await fetch(`${DB}/${ROOT}/matches.json?auth=${token}`);
+    if (!existingRes.ok) { console.warn(`Could not read existing matches (HTTP ${existingRes.status}); skipping this run to avoid duplicates.`); return; }
+    const existingMatches = (await existingRes.json()) || {};
     const toAdd = mapScheduledFixtures({ fdMatches, existingMatches, now, windowEndMs: WINDOW_END });
 
     if (toAdd.length === 0) {
