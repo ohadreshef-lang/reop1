@@ -1,0 +1,33 @@
+<!doctype html><meta charset="utf-8"><title>tabbar harness</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../styles.css">
+<body style="direction:rtl">
+<section id="main-app">
+  <div class="app-header">
+    <header class="app-bar">
+      <div class="app-bar-user">
+        <div class="lang-toggle-inline"><select class="lang-select"><option>🇮🇱</option></select></div>
+        <div class="group-switcher-wrap"><button class="group-switch-btn"><span id="active-group-name">מונדיאל 2026 - ו'3 גבריאלי</span><span class="group-switch-caret">▾</span></button></div>
+        <span id="header-username">shay tsadok</span><button class="btn-text">יציאה</button>
+      </div>
+    </header>
+    <nav class="tab-bar">
+      <button class="tab-btn active"><span class="tab-icon">🏟️</span><span>משחקים</span></button>
+      <button class="tab-btn"><span class="tab-icon">🏆</span><span>לידרבורד</span></button>
+      <button class="tab-btn"><span class="tab-icon">🎯</span><span>הניחושים שלי</span></button>
+      <button class="tab-btn"><span class="tab-icon">🏆</span><span>טורניר</span></button>
+      <button class="tab-btn"><span class="tab-icon">🔴</span><span>חי</span></button>
+    </nav>
+  </div>
+  <main class="app-content"><div id="filler"></div></main>
+</section>
+<div id="dbg" style="position:fixed;bottom:0;left:0;right:0;background:#000;color:#0f0;font:12px monospace;padding:5px;z-index:9999"></div>
+<script>
+  const f=document.getElementById('filler');
+  for(let i=0;i<10;i++){const d=document.createElement('div');d.style.cssText='background:#fff;border:1px solid #ddd;border-radius:12px;padding:26px;margin:12px 0';d.textContent='משחק '+(i+1);f.appendChild(d);}
+  window.scrollTo(0,400);
+  const h=document.querySelector('.app-header').getBoundingClientRect();
+  const tb=document.querySelector('.tab-bar').getBoundingClientRect();
+  document.getElementById('dbg').textContent=`scrollY=${Math.round(window.scrollY)} header.top=${Math.round(h.top)} header.height=${Math.round(h.height)} tabbar.bottom=${Math.round(tb.bottom)} => ${Math.round(h.top)===0?'PINNED':'NOT pinned'}`;
+</script>
+</body>

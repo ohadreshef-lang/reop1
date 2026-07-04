@@ -1,0 +1,26 @@
+<!doctype html><meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<body style="direction:rtl">
+<div id="tab-matches" class="tab-panel active"><div id="featured-matches-container"></div><div id="matches-container" class="app-content"></div></div>
+<script>window.firebase=undefined;window.db=null;window.currentUser={userId:'u1'};
+window.t=k=>({'match.aet':'אחרי הארכה','match.yourBet':'ניחוש','match.editBet':'ערוך','live.total':'סה"כ','common.pts':'נק׳'}[k]||k);
+window.translateTeam=n=>n;window.currentLang='he';</script>
+<script src="../../app.js?cb=1"></script>
+<script>
+  // A finished knockout game: 90' 2-2, a.e.t. 3-2.
+  Object.assign(matches,{
+    ko:{team1:'בלגיה',team2:'סנגל',date:'2026-07-01T20:00',stage:'R32',status:'completed',
+        result:{team1Goals:2,team2Goals:2},resultAet:{team1Goals:3,team2Goals:2},scorers:[]},
+    grp:{team1:'ברזיל',team2:'יפן',date:'2026-06-29T17:00',stage:'group',status:'completed',
+        result:{team1Goals:2,team2Goals:1},scorers:[]},
+  });
+  Object.assign(groupMembers,{u1:{name:'A',totalPoints:0}});Object.assign(groupUsersCache,groupMembers);
+  Object.assign(allGroupBets,{u1:{}});Object.assign(userBets,{});
+  window.activeTournament='worldcup2026';window.stageFilter='all';renderMatches();
+  const aet=[...document.querySelectorAll('.result-aet')];
+  const koCard=[...document.querySelectorAll('.match-card')].find(c=>c.textContent.includes('בלגיה'));
+  const grpCard=[...document.querySelectorAll('.match-card')].find(c=>c.textContent.includes('ברזיל'));
+  const koHasAet=koCard&&/אחרי הארכה 3–2/.test(koCard.textContent);
+  const grpHasAet=grpCard&&grpCard.querySelector('.result-aet');
+  document.title='AETCOUNT:'+aet.length+' KO:'+!!koHasAet+' GRPNONE:'+!grpHasAet;
+</script></body>

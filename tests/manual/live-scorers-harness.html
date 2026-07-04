@@ -1,0 +1,22 @@
+<!doctype html><meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<body style="direction:rtl">
+<div id="tab-live" class="tab-panel active"><div id="live-container" class="app-content"></div></div>
+<script>window.firebase=undefined;window.db=null;window.currentUser={userId:'u1'};
+window.t=k=>({'live.statusLive':'משחק חי','live.notStarted':'טרם החל','live.total':'סה"כ','leaderboard.meTag':'אני','groupSettings.unknownUser':'?','live.empty':'אין'}[k]||k);
+window.translateTeam=n=>n;window.currentLang='he';</script>
+<script src="../../app.js?cb=1"></script>
+<script>
+  const ago=ms=>new Date(Date.now()-ms).toISOString().slice(0,16);
+  Object.assign(matches,{g:{team1:'הולנד',team2:'שוודיה',date:ago(23*60000),group:'D',stage:'group',
+    live:{team1Goals:2,team2Goals:1,status:'IN_PLAY',updatedAt:Date.now()-60000,minute:80,
+      scorers:[{team:1,player:'Brobbey',minute:5,extra:null,kind:'goal'},
+               {team:1,player:'Depay',minute:60,extra:null,kind:'pen'},
+               {team:2,player:'Lindelof',minute:80,extra:null,kind:'og'}]}}});
+  Object.assign(groupMembers,{u1:{name:'shay',totalPoints:10}});
+  Object.assign(groupUsersCache,groupMembers);
+  window.activeTournament='worldcup2026';window.stageFilter='all';renderLive();
+  const h=document.querySelector('#live-container').innerHTML;
+  document.title='SCORERS:'+h.includes('live-scorers')+' EMOJI:'+h.includes('⚽')
+    +' PEN:'+h.includes('live.penaltyMark')+' OG:'+h.includes('live.ownGoalMark')+' NAME:'+h.includes('Brobbey');
+</script></body>

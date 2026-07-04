@@ -8,7 +8,7 @@
     <meta property="og:description" content="נחש את התוצאות, תתחרה עם החברים!">
 
     <!-- PWA / iOS Home-Screen support -->
-    <link rel="manifest" href="/manifest.json?v=20260616a">
+    <link rel="manifest" href="/manifest.json?v=20260702b">
     <meta name="theme-color" content="#1a4731">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -52,12 +52,12 @@
     <link rel="apple-touch-startup-image" href="/assets/splash/splash-750x1334.png"
           media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
 
-    <link rel="stylesheet" href="styles.css?v=20260616a">
+    <link rel="stylesheet" href="styles.css?v=20260702b">
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="firebase-config.js"></script>
-    <script src="i18n.js?v=20260616a"></script>
+    <script src="i18n.js?v=20260702b"></script>
 </head>
 <body>
 
@@ -74,6 +74,12 @@
             <div class="login-logo">⚽</div>
             <h1 data-i18n="modeChoice.title">ניחושי מונדיאל 2026</h1>
             <p class="login-subtitle" data-i18n="modeChoice.subtitle">נחש תוצאות, צבור נקודות, תתחרה עם החברים!</p>
+            <button id="btn-google-login-mode" class="btn btn-google btn-block">
+                <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                <span data-i18n="login.googleBtn">כניסה עם Google</span>
+            </button>
+            <p id="mode-login-error" class="error-msg hidden"></p>
+            <div class="login-divider"><span>או</span></div>
             <div class="mode-choice-cards">
                 <button id="btn-mode-public" class="btn btn-primary btn-block" data-i18n="modeChoice.publicBtn">⚽ נחש תוצאות מונדיאל</button>
                 <p class="mode-hint" data-i18n="modeChoice.publicHint">הצטרף לטבלת כולם — ללא קוד</p>
@@ -149,8 +155,10 @@
 
     <!-- ===== MAIN APP ===== -->
     <section id="main-app" class="hidden">
+        <!-- Slim, always-pinned header: app-bar + tabs stick together as one unit
+             (no magic-number offset, robust to height). -->
+        <div class="app-header">
         <header class="app-bar">
-            <div class="app-bar-title" id="app-bar-title">⚽ מונדיאל 2026</div>
             <div class="app-bar-user">
                 <div class="lang-toggle-inline">
                     <select class="lang-select" aria-label="Language">
@@ -179,12 +187,6 @@
             </div>
         </header>
 
-        <!-- Tournament bar: UCL hidden, WC is the only active tournament -->
-        <div class="tournament-bar">
-            <button class="tournament-btn active" data-tournament="worldcup2026">⚽ מונדיאל 2026</button>
-            <button class="tournament-btn" data-tournament="ucl2025" style="display:none">🏆 ליגת האלופות</button>
-        </div>
-
         <nav class="tab-bar">
             <button class="tab-btn active" data-tab="matches">
                 <span class="tab-icon">🏟️</span><span data-i18n="tabs.matches">משחקים</span>
@@ -198,7 +200,10 @@
             <button class="tab-btn" data-tab="tournament">
                 <span class="tab-icon">🏆</span><span data-i18n="tabs.tournament">טורניר</span>
             </button>
+            <button class="tab-btn" data-tab="live"><span class="tab-icon">🔴</span><span data-i18n="tabs.live">חי</span></button>
         </nav>
+        </div>
+        <!-- /app-header -->
 
         <main class="app-content">
             <!-- MATCHES TAB -->
@@ -251,6 +256,11 @@
                 <div id="tournament-container">
                     <p class="state-msg" data-i18n="common.loading">טוען...</p>
                 </div>
+            </div>
+
+            <!-- LIVE TAB -->
+            <div id="tab-live" class="tab-panel">
+                <div id="live-container"></div>
             </div>
         </main>
 
@@ -588,14 +598,14 @@
         </div>
     </div>
 
-    <script src="app.js?v=20260616a"></script>
-    <script src="team-logos.js?v=20260616a"></script>
+    <script src="app.js?v=20260702b"></script>
+    <script src="team-logos.js?v=20260702b"></script>
 
     <script>
         // Register the PWA service worker (skip in admin mode to avoid stale UI).
         if ('serviceWorker' in navigator && !location.search.includes('admin')) {
             window.addEventListener('load', function () {
-                navigator.serviceWorker.register('/service-worker.js?v=20260616a')
+                navigator.serviceWorker.register('/service-worker.js?v=20260702b')
                     .catch(function (err) { console.warn('SW register failed:', err); });
             });
         }

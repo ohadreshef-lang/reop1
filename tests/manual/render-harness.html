@@ -1,0 +1,64 @@
+<!doctype html><meta charset="utf-8"><title>render harness</title>
+<div id="tab-live" class="tab-panel"><div id="live-container"></div></div>
+<div id="matches-container"></div><div id="featured-matches-container"></div>
+<pre id="RESULT"></pre>
+<script>
+  // Stub the globals app.js touches so it loads without Firebase/DOM wiring.
+  window.firebase = undefined; window.db = null;
+  window.t = k => k; window.translateTeam = n => n; window.currentLang = 'he';
+</script>
+<script src="../../i18n.js?cachebust=1"></script>
+<script src="../../app.js?cachebust=1"></script>
+<script>
+  try {
+  // Inject mock state. app.js uses top-level `let` which in classic scripts does NOT land
+  // on `window`, so we mutate the existing objects via Object.assign / bracket assignment.
+  // All of these refs are the same objects the closures inside app.js captured.
+  const now = Date.now();
+  // parseMatchDate() appends 'Z', treating naive strings as UTC.
+  // matchIsLocked fires when kickoff is <= 5 min away.
+  // We set the match 2 minutes from now UTC so it is firmly in the lock window.
+  const soon = new Date(now + 2*60*1000).toISOString().slice(0,16);
+
+  // matches, groupMembers, groupUsersCache, allGroupBets are `let {}` objects — mutate in place.
+  Object.assign(matches, {
+    g1: { team1:'גאנה', team2:'פנמה', date: soon, group:'L', stage:'group',
+          live:{ team1Goals:1, team2Goals:0, status:'IN_PLAY', updatedAt: now } },
+  });
+  Object.assign(groupMembers, { u1:{name:'Alice'}, u2:{name:'Bob'} });
+  Object.assign(groupUsersCache, { u1:{name:'Alice'}, u2:{name:'Bob'} });
+  Object.assign(allGroupBets, { u1:{ g1:{team1Goals:1, team2Goals:0} }, u2:{ g1:{team1Goals:2, team2Goals:2} } });
+  // activeTournament is a `let` primitive — reassign via the exposed setter if available,
+  // or rely on the default value set at declaration ('ucl2025'). We need 'worldcup2026'
+  // so call switchTournament if db is null (no Firebase), otherwise the filter in renderLive
+  // would exclude our mock match. We patch it by overriding matchIsLocked to skip tournament check.
+  // Simplest fix: the mock match has no .tournament field, so the filter
+  // `(!m.tournament || m.tournament === activeTournament)` passes when m.tournament is undefined.
+
+  renderLive();
+  const html = document.getElementById('live-container').innerHTML;
+  const checks = [
+    ['renders a live card', html.includes('live-card')],
+    ['shows live score 1 – 0', html.includes('1 – 0')],
+    ['Alice exact -> 4 pts shown', /Alice[\s\S]*?1–0[\s\S]*?>4</.test(html)],
+    ['Bob wrong -> 0 pts shown', /Bob[\s\S]*?2–2[\s\S]*?>0</.test(html)],
+  ];
+
+  // Task 6: finished match breakdown. Mutate the same `let` objects in place (bare
+  // refs — these are NOT on `window`; using window.matches here would be undefined).
+  matches.g2 = { id:'g2', team1:'אנגליה', team2:'קרואטיה', date:'2026-06-10T20:00', group:'L', stage:'group',
+                 result:{ team1Goals:4, team2Goals:2 }, finishedAt: now - 3*3600*1000 };
+  allGroupBets.u1.g2 = { team1Goals:4, team2Goals:2 }; // exact
+  stageFilter = 'all';
+  renderMatches();
+  const mhtml = document.getElementById('matches-container').innerHTML;
+  checks.push(['matches breakdown toggle present', mhtml.includes('breakdown-toggle')]);
+  checks.push(['breakdown shows Alice exact points', /Alice[\s\S]*?4–2[\s\S]*?>4</.test(mhtml)]);
+
+  document.getElementById('RESULT').textContent =
+    checks.map(([n,ok]) => (ok?'PASS':'FAIL')+' '+n).join('\n');
+  } catch (e) {
+    // Surface render throws instead of leaving #RESULT empty (which hides failures).
+    document.getElementById('RESULT').textContent = 'FAIL (threw): ' + (e && e.message) + '\n' + (e && e.stack);
+  }
+</script>

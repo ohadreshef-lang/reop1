@@ -1,0 +1,28 @@
+<!doctype html><meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<body style="direction:rtl">
+<div id="tab-leaderboard" class="tab-panel active"><div id="leaderboard-container" class="app-content"></div></div>
+<script>window.firebase=undefined;window.db=null;window.currentUser={userId:'u1'};
+window.t=k=>({'leaderboard.meTag':'אני','leaderboard.empty':'ריק','common.pts':'נק׳','groupSettings.unknownUser':'?'}[k]||k);
+window.translateTeam=n=>n;window.currentLang='he';</script>
+<script src="../../app.js?cb=1"></script>
+<script>
+  // gA is an OLD game (kickoff 06-22) but RE-FINALIZED late (finishedAt 06-25 09:00).
+  // By kickoff it's the oldest -> should be the FIRST dot. By finishedAt it would wrongly be last.
+  Object.assign(matches,{
+    gA:{team1:'A1',team2:'A2',date:'2026-06-22T19:00',group:'X',stage:'group',result:{team1Goals:2,team2Goals:0},finishedAt:Date.parse('2026-06-25T09:00:00Z')},
+    gB:{team1:'B1',team2:'B2',date:'2026-06-24T19:00',group:'Y',stage:'group',result:{team1Goals:1,team2Goals:1},finishedAt:Date.parse('2026-06-24T21:00:00Z')},
+    gC:{team1:'C1',team2:'C2',date:'2026-06-24T22:00',group:'Z',stage:'group',result:{team1Goals:3,team2Goals:0},finishedAt:Date.parse('2026-06-25T00:00:00Z')},
+  });
+  Object.assign(groupMembers,{u1:{name:'X',totalPoints:5}});
+  Object.assign(groupUsersCache,groupMembers);
+  Object.assign(allGroupBets,{u1:{
+    gA:{team1Goals:2,team2Goals:0,points:4},
+    gB:{team1Goals:1,team2Goals:1,points:1},
+    gC:{team1Goals:0,team2Goals:0,points:0},
+  }});
+  window.activeTournament='worldcup2026';window.stageFilter='all';renderLeaderboard();
+  const dots=[...document.querySelectorAll('.lb-form-dot')].map(e=>e.textContent).join(',');
+  // kickoff order gA(06-22)<gB(06-24 19:00)<gC(06-24 22:00) -> oldest->newest dots = 4,1,0
+  document.title='DOTS:'+dots+' OK:'+(dots==='4,1,0');
+</script></body>

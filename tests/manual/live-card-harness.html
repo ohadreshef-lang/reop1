@@ -1,0 +1,25 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="../../styles.css">
+<body style="direction:rtl">
+<div id="tab-live" class="tab-panel active"><div id="live-container" class="app-content"></div></div>
+<script>window.firebase=undefined;window.db=null;window.t=k=>({'live.statusLive':'משחק חי','live.statusHalftime':'מחצית','live.statusLocked':'ניחושים נעולים','live.notStarted':'טרם החל','live.provisional':'נק׳ (חי)','match.yourBet':'הניחוש שלך','match.status.completed':'הסתיים','live.empty':'אין משחקים','groupSettings.unknownUser':'?'}[k]||k);window.translateTeam=n=>n;window.currentLang='he';</script>
+<script src="../../app.js?cb=1"></script>
+<script>
+  const past = ms => new Date(Date.now()+ms).toISOString().slice(0,16);
+  Object.assign(matches, {
+    g_live: { team1:'ארצות הברית', team2:'אוסטרליה', date: past(-10*60000), group:'D', stage:'group',
+              live:{ team1Goals:1, team2Goals:2, status:'IN_PLAY', updatedAt:Date.now() } },
+    g_started: { team1:'גאנה', team2:'פנמה', date: past(-3*60000), group:'L', stage:'group' },  // started, no node -> 0-0
+  });
+  Object.assign(groupMembers, { u1:{name:'Adam Machness'}, u2:{name:'דודי לוי'}, u3:{name:'Keren S'}, u4:{name:'shay tsadok'} });
+  Object.assign(groupUsersCache, groupMembers);
+  Object.assign(allGroupBets, {
+    u1:{ g_live:{team1Goals:1,team2Goals:2}, g_started:{team1Goals:0,team2Goals:0} },  // live exact / started exact
+    u2:{ g_live:{team1Goals:0,team2Goals:1}, g_started:{team1Goals:1,team2Goals:1} },  // live win2 / started draw
+    u3:{ g_live:{team1Goals:2,team2Goals:0}, g_started:{team1Goals:2,team2Goals:0} },  // miss
+    u4:{ g_live:{team1Goals:1,team2Goals:3}, g_started:{team1Goals:0,team2Goals:1} },  // live win2 / started win2
+  });
+  window.activeTournament='worldcup2026'; window.stageFilter='all';
+  renderLive();
+</script>
+</body>

@@ -2,22 +2,55 @@ name: Update match results
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    # GitHub throttles high-frequency schedules (observed: every ~2h, not */5). So a
+    # single run polls internally every 5 min (fixed cadence, no API quota) for up to
+    # ~5.5h — one trigger blankets a whole evening of matches with fresh live scores,
+    # no matter how sparsely GitHub actually fires.
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
+# cancel-in-progress so a new trigger RESTARTS the long poll instead of queueing
+# behind it (the loop is idempotent — each iteration reads fresh state). This keeps
+# coverage continuous during matches with zero backlog of stale long-running jobs.
 concurrency:
   group: update-results
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Fetch finished matches and write results
-        run: node scripts/update-results.mjs
+      - name: Poll finished + live matches (fixed 5-min cadence, up to ~5.5h)
+        run: |
+          # Fixed 5-min cadence: live scores from ESPN's keyless public API, finals from
+          # football-data.org — neither has a daily quota to throttle against. set +e so
+          # a single failing iteration (transient blip / stale-red) never aborts the
+          # loop; we exit with the LAST iteration's status.
+          # The script prints LOOP_IDLE when no match is live and none starts within ~2h —
+          # we end the run early then (the cron re-triggers before the next match).
+          set +e
+          last=0
+          end=$(( $(date +%s) + 19800 ))   # ~5.5h wall-clock deadline (interval varies)
+          i=0
+          while [ "$(date +%s)" -lt "$end" ]; do
+            i=$((i+1))
+            echo "::group::poll $i ($(date -u +%H:%M:%S)Z)"
+            out=$(node scripts/update-results.mjs 2>&1); last=$?
+            printf '%s\n' "$out"
+            echo "::endgroup::"
+            if printf '%s' "$out" | grep -q 'LOOP_IDLE'; then
+              echo "No live game and none within ~2h — ending run early; cron will re-trigger."
+              break
+            fi
+            sleep_s=$(node scripts/poll-seconds.mjs 2>/dev/null || echo 300)
+            echo "next poll in ${sleep_s}s"
+            sleep "$sleep_s"
+          done
+          exit $last
         env:
           FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}

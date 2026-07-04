@@ -33,11 +33,20 @@ const TRANSLATIONS = {
             <p>לפני כל משחק של המונדיאל אתה מנחש את התוצאה המדויקת (מספר השערים של כל קבוצה). מערכת הניקוד מזכה אותך אוטומטית ברגע שהמנהל מזין את התוצאה האמיתית.</p>
 
             <h4>🏆 מערכת הניקוד</h4>
+            <p><b>שלב הבתים</b></p>
             <ul>
-                <li><span class="rule-points">4 נק'</span> תוצאה מדויקת (גם התוצאה הסופית וגם מספר השערים של כל קבוצה נכונים)</li>
-                <li><span class="rule-points">1 נק'</span> רק הקבוצה המנצחת (או תיקו) נכונה – התוצאה שגויה</li>
-                <li><span class="rule-points">0 נק'</span> ניחוש שגוי או ללא ניחוש</li>
+                <li><span class="rule-points">4 נק'</span> תוצאה מדויקת (גם המנצח וגם מספר השערים של כל קבוצה נכונים)</li>
+                <li><span class="rule-points">1 נק'</span> רק כיוון התוצאה נכון (ניצחון או תיקו) – התוצאה שגויה</li>
+                <li><span class="rule-points">0 נק'</span> ניחוש שגוי</li>
             </ul>
+            <p><b>שלב הנוקאאוט (משלב 32 ואילך)</b> — הניקוד נקבע לפי התוצאה בתום <b>90 הדקות</b> (כולל זמן פציעות; ללא הארכה ופנדלים):</p>
+            <ul>
+                <li><span class="rule-points">5 נק'</span> תוצאה מדויקת</li>
+                <li><span class="rule-points">+2 נק'</span> בונוס על תוצאה מדויקת עם <b>5 שערים או יותר</b> בסך הכול (כלומר 7 נק')</li>
+                <li><span class="rule-points">2 נק'</span> רק כיוון התוצאה נכון</li>
+                <li><span class="rule-points">0 נק'</span> ניחוש שגוי</li>
+            </ul>
+            <p>אם לא הזנת ניחוש, הוא נספר אוטומטית כ-<b>0:0</b> — כך שעדיין אפשר לזכות בנקודות אם המשחק יסתיים בתיקו (וניקוד מלא אם יסתיים 0:0).</p>
 
             <h4>🏅 ניחושי טורניר</h4>
             <ul>
@@ -113,6 +122,21 @@ const TRANSLATIONS = {
         'tabs.leaderboard': 'לידרבורד',
         'tabs.myBets': 'הניחושים שלי',
         'tabs.tournament': 'טורניר',
+        'tabs.live': 'חי',
+
+        // Live tab
+        'live.empty': 'אין משחקים פעילים כרגע',
+        'live.statusLocked': 'ניחושים נעולים',
+        'live.statusLive': 'משחק חי',
+        'live.updatedAgo': 'עודכן לפני {n} דק׳',
+        'live.noLiveData': 'אין עדכון חי · {n} דק׳',
+        'live.statusHalftime': 'מחצית',
+        'live.statusAwaiting': 'ממתין לתוצאה',
+        'live.provisional': 'נקודות (חי)',
+        'live.total': 'סה"כ',
+        'live.notStarted': 'טרם החל',
+        'live.penaltyMark': '(פנדל)',
+        'live.ownGoalMark': '(ש.ע)',
 
         // Stages
         'stage.all': 'הכל',
@@ -141,8 +165,10 @@ const TRANSLATIONS = {
         'match.noBetRow': 'לא ניחשת על משחק זה',
         'match.pointsRow': 'ניחוש',
         'match.pointsLabel': 'נקודות',
+        'match.showBreakdown': 'הצג ניחושים של כולם',
         'match.emptyState': 'אין משחקים להצגה. האדמין יכול לטעון את המשחקים.',
         'match.loadingMatches': 'טוען משחקים...',
+        'match.aet': 'אחרי הארכה',
 
         // Leaderboard
         'leaderboard.title': '🏆 טבלת דירוג',
@@ -150,6 +176,7 @@ const TRANSLATIONS = {
         'leaderboard.scoringWinner': 'מנצח נכון = 1 נק\'',
         'leaderboard.empty': 'אין משתתפים עדיין בקבוצה זו.',
         'leaderboard.meTag': 'אני',
+        'paul.name': 'פול התמנון',
 
         // My bets
         'myBets.title': '🎯 הניחושים שלי',
@@ -319,11 +346,20 @@ const TRANSLATIONS = {
             <p>Before every World Cup match you predict the exact score (goals for each team). Points are awarded automatically once the admin enters the real result.</p>
 
             <h4>🏆 Scoring</h4>
+            <p><b>Group stage</b></p>
             <ul>
-                <li><span class="rule-points">4 pts</span> Exact score (both teams' goal counts correct)</li>
-                <li><span class="rule-points">1 pt</span> Correct winner (or draw) but wrong score</li>
-                <li><span class="rule-points">0 pts</span> Wrong prediction or no prediction</li>
+                <li><span class="rule-points">4 pts</span> Exact score (winner and both teams' goal counts correct)</li>
+                <li><span class="rule-points">1 pt</span> Correct direction only (winner or draw) — wrong score</li>
+                <li><span class="rule-points">0 pts</span> Wrong prediction</li>
             </ul>
+            <p><b>Knockout stage (Round of 32 onward)</b> — scored on the <b>90-minute</b> result (incl. stoppage time; no extra time or penalties):</p>
+            <ul>
+                <li><span class="rule-points">5 pts</span> Exact score</li>
+                <li><span class="rule-points">+2 pts</span> Bonus for an exact score with <b>5 or more total goals</b> (i.e. 7 pts)</li>
+                <li><span class="rule-points">2 pts</span> Correct direction only</li>
+                <li><span class="rule-points">0 pts</span> Wrong prediction</li>
+            </ul>
+            <p>If you don't enter a prediction, it counts automatically as <b>0–0</b> — so you can still earn points if the match ends in a draw (and full points if it ends 0–0).</p>
 
             <h4>🏅 Tournament predictions</h4>
             <ul>
@@ -394,6 +430,21 @@ const TRANSLATIONS = {
         'tabs.leaderboard': 'Leaderboard',
         'tabs.myBets': 'My predictions',
         'tabs.tournament': 'Tournament',
+        'tabs.live': 'Live',
+
+        // Live tab
+        'live.empty': 'No active games right now',
+        'live.statusLocked': 'Bets locked',
+        'live.statusLive': 'Live',
+        'live.updatedAgo': 'updated {n} min ago',
+        'live.noLiveData': 'no live update · {n} min',
+        'live.statusHalftime': 'Half-time',
+        'live.statusAwaiting': 'Awaiting score',
+        'live.provisional': 'pts (live)',
+        'live.total': 'Total',
+        'live.notStarted': 'Not started',
+        'live.penaltyMark': '(pen)',
+        'live.ownGoalMark': '(OG)',
 
         'stage.all': 'All',
         'stage.group': 'Group stage',
@@ -420,14 +471,17 @@ const TRANSLATIONS = {
         'match.noBetRow': 'You didn\'t predict this match',
         'match.pointsRow': 'Prediction',
         'match.pointsLabel': 'points',
+        'match.showBreakdown': 'Show everyone\'s bets',
         'match.emptyState': 'No matches to display. An admin can load them.',
         'match.loadingMatches': 'Loading matches...',
+        'match.aet': 'a.e.t.',
 
         'leaderboard.title': '🏆 Leaderboard',
         'leaderboard.scoringExact': 'Exact score = 4 pts',
         'leaderboard.scoringWinner': 'Correct winner = 1 pt',
         'leaderboard.empty': 'No members in this group yet.',
         'leaderboard.meTag': 'you',
+        'paul.name': 'Paul the Octopus',
 
         'myBets.title': '🎯 My predictions',
         'myBets.empty': 'You haven\'t predicted any match yet.',
@@ -589,11 +643,20 @@ const TRANSLATIONS = {
             <p>Antes de cada partido del Mundial, predice el resultado exacto (goles de cada equipo). Los puntos se otorgan automáticamente cuando el administrador ingresa el resultado real.</p>
 
             <h4>🏆 Puntuación</h4>
+            <p><b>Fase de grupos</b></p>
             <ul>
-                <li><span class="rule-points">4 pts</span> Resultado exacto (goles de ambos equipos correctos)</li>
-                <li><span class="rule-points">1 pt</span> Ganador correcto (o empate) pero resultado incorrecto</li>
-                <li><span class="rule-points">0 pts</span> Predicción incorrecta o sin predicción</li>
+                <li><span class="rule-points">4 pts</span> Resultado exacto (ganador y goles de ambos equipos correctos)</li>
+                <li><span class="rule-points">1 pt</span> Solo la dirección correcta (ganador o empate) — resultado incorrecto</li>
+                <li><span class="rule-points">0 pts</span> Predicción incorrecta</li>
             </ul>
+            <p><b>Fase eliminatoria (desde dieciseisavos)</b> — se puntúa con el resultado a los <b>90 minutos</b> (incluido el tiempo añadido; sin prórroga ni penales):</p>
+            <ul>
+                <li><span class="rule-points">5 pts</span> Resultado exacto</li>
+                <li><span class="rule-points">+2 pts</span> Bono por un resultado exacto con <b>5 o más goles</b> en total (es decir, 7 pts)</li>
+                <li><span class="rule-points">2 pts</span> Solo la dirección correcta</li>
+                <li><span class="rule-points">0 pts</span> Predicción incorrecta</li>
+            </ul>
+            <p>Si no ingresas una predicción, cuenta automáticamente como <b>0–0</b>, así que aún puedes ganar puntos si el partido termina en empate (y todos los puntos si termina 0–0).</p>
 
             <h4>🏅 Predicciones del torneo</h4>
             <ul>
@@ -664,6 +727,21 @@ const TRANSLATIONS = {
         'tabs.leaderboard': 'Tabla',
         'tabs.myBets': 'Mis predicciones',
         'tabs.tournament': 'Torneo',
+        'tabs.live': 'En vivo',
+
+        // Live tab
+        'live.empty': 'No hay partidos activos ahora',
+        'live.statusLocked': 'Apuestas cerradas',
+        'live.statusLive': 'En vivo',
+        'live.updatedAgo': 'actualizado hace {n} min',
+        'live.noLiveData': 'sin datos en vivo · {n} min',
+        'live.statusHalftime': 'Descanso',
+        'live.statusAwaiting': 'Esperando resultado',
+        'live.provisional': 'pts (en vivo)',
+        'live.total': 'Total',
+        'live.notStarted': 'No empezó',
+        'live.penaltyMark': '(pen)',
+        'live.ownGoalMark': '(a.p.)',
 
         'stage.all': 'Todos',
         'stage.group': 'Fase de grupos',
@@ -690,14 +768,17 @@ const TRANSLATIONS = {
         'match.noBetRow': 'No predijiste este partido',
         'match.pointsRow': 'Predicción',
         'match.pointsLabel': 'puntos',
+        'match.showBreakdown': 'Ver apuestas de todos',
         'match.emptyState': 'No hay partidos. Un admin puede cargarlos.',
         'match.loadingMatches': 'Cargando partidos...',
+        'match.aet': 'tras la prórroga',
 
         'leaderboard.title': '🏆 Tabla de posiciones',
         'leaderboard.scoringExact': 'Resultado exacto = 4 pts',
         'leaderboard.scoringWinner': 'Ganador correcto = 1 pt',
         'leaderboard.empty': 'Aún no hay miembros en este grupo.',
         'leaderboard.meTag': 'tú',
+        'paul.name': 'Paul el Pulpo',
 
         'myBets.title': '🎯 Mis predicciones',
         'myBets.empty': 'Aún no predijiste ningún partido.',

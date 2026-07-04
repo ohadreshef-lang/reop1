@@ -1,0 +1,25 @@
+<!doctype html><meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<body style="direction:rtl">
+<div id="out"></div>
+<script>window.firebase=undefined;window.db=null;window.currentUser={userId:'u1'};
+window.t=k=>({'match.yourBet':'ניחוש','match.status.completed':'הסתיים','match.showBreakdown':'פירוט','match.pointsLabel':'נק׳','groupSettings.unknownUser':'?'}[k]||k);
+window.translateTeam=n=>n;window.currentLang='he';</script>
+<script src="../../app.js?cb=1"></script>
+<script>
+  const ago=ms=>new Date(Date.now()-ms).toISOString().slice(0,16);
+  const m={id:'g',team1:'הולנד',team2:'שוודיה',date:ago(110*60000),group:'F',stage:'group',
+    result:{team1Goals:2,team2Goals:1},
+    scorers:[{team:1,player:'Brobbey',minute:5,extra:null,kind:'goal'},
+             {team:2,player:'Elanga',minute:59,extra:null,kind:'goal'}]};
+  Object.assign(matches,{g:m});
+  // three members with differing totals -> leaderboard order is High, Mid, Low
+  Object.assign(groupMembers,{u1:{name:'Low',totalPoints:3},u2:{name:'High',totalPoints:30},u3:{name:'Mid',totalPoints:15}});
+  Object.assign(groupUsersCache,groupMembers);
+  Object.assign(allGroupBets,{u1:{g:{team1Goals:0,team2Goals:0}},u2:{g:{team1Goals:2,team2Goals:1}},u3:{g:{team1Goals:1,team2Goals:1}}});
+  window.activeTournament='worldcup2026';window.stageFilter='all';
+  document.getElementById('out').innerHTML=buildMatchCard(m);
+  const names=[...document.querySelectorAll('#breakdown-g .lp-name')].map(e=>e.textContent);
+  const h=document.getElementById('out').innerHTML;
+  document.title='SCORERS:'+h.includes('live-scorers')+' ORDER:'+names.join(',');
+</script></body>

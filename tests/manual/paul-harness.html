@@ -1,0 +1,17 @@
+<!doctype html><meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<body style="direction:rtl">
+<div id="tab-leaderboard" class="tab-panel active"><div id="leaderboard-container" class="app-content"></div></div>
+<script>window.firebase=undefined;window.db=null;window.currentUser={userId:'u1'};
+window.t=k=>({ 'paul.name':'פול התמנון','leaderboard.meTag':'אני','leaderboard.empty':'ריק','common.pts':'נק׳','groupSettings.unknownUser':'?' }[k]||k);
+window.translateTeam=n=>n;window.currentLang='he';</script>
+<script src="../../app.js?cb=1"></script>
+<script>
+  Object.assign(groupMembers,{
+    u1:{name:'shay',totalPoints:20},
+    'paul-octopus':{name:'פול התמנון',totalPoints:14} });
+  Object.assign(groupUsersCache,groupMembers);
+  window.activeTournament='worldcup2026';window.stageFilter='all';renderLeaderboard();
+  document.title='HAS_OCTO:'+document.querySelector('#leaderboard-container').innerHTML.includes('octo-icon')
+    + ' EMOJI:'+document.querySelector('#leaderboard-container').innerHTML.includes('🐙');
+</script></body>

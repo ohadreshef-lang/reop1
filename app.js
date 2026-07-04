@@ -162,6 +162,28 @@ function getSortedScorerCandidates() {
     );
 }
 
+// פול התמנון (Paul the Octopus) — the automated dummy member. Same id as the
+// updater's paul-core PAUL_USER_ID; he is created/scored server-side.
+const PAUL_USER_ID = 'paul-octopus';
+function isPaul(uid) { return uid === PAUL_USER_ID; }
+
+// HTML label for a member in lists: Paul gets a 🐙 + his localized name; everyone
+// else their (escaped) stored name. Returns markup, so callers insert it directly.
+function memberLabel(uid, fallbackName) {
+    if (isPaul(uid)) return `<span class="octo-icon">🐙</span>${escapeHtml(t('paul.name'))}`;
+    return escapeHtml(fallbackName);
+}
+
+// One scorer line for the live card: "⚽ <minute> <name>" with a penalty/own-goal mark.
+// Returns markup, so callers insert it directly.
+function scorerLine(s) {
+    const min = typeof s.minute === 'number'
+        ? (typeof s.extra === 'number' && s.extra > 0 ? `${s.minute}+${s.extra}'` : `${s.minute}'`)
+        : '';
+    const mark = s.kind === 'pen' ? ` ${t('live.penaltyMark')}` : s.kind === 'og' ? ` ${t('live.ownGoalMark')}` : '';
+    return `<div class="live-scorer">⚽ <span class="live-scorer-min">${min}</span> ${escapeHtml(s.player)}${mark}</div>`;
+}
+
 // ---- Scoring ----
 
 function getOutcome(g1, g2) {
@@ -170,9 +192,20 @@ function getOutcome(g1, g2) {
     return 'draw';
 }
 
-function calcPoints(betGoals1, betGoals2, resGoals1, resGoals2) {
-    if (betGoals1 === resGoals1 && betGoals2 === resGoals2) return 4;
-    if (getOutcome(betGoals1, betGoals2) === getOutcome(resGoals1, resGoals2)) return 1;
+// Knockout = any stage that isn't the group stage or the special (champion/top-scorer) bets.
+function isKnockoutStage(stage) {
+    return stage != null && stage !== 'group' && stage !== 'special';
+}
+
+// Group: exact=4, direction=1, miss=0. Knockout (R32+): exact=5 (+2 if 5+ total goals), direction=2.
+// Knockout results are entered as the 90-minute score (see the updater's regularTime sourcing).
+function calcPoints(betGoals1, betGoals2, resGoals1, resGoals2, stage) {
+    const ko = isKnockoutStage(stage);
+    if (betGoals1 === resGoals1 && betGoals2 === resGoals2) {
+        if (ko) return (resGoals1 + resGoals2) >= 5 ? 7 : 5;
+        return 4;
+    }
+    if (getOutcome(betGoals1, betGoals2) === getOutcome(resGoals1, resGoals2)) return ko ? 2 : 1;
     return 0;
 }
 
@@ -181,8 +214,15 @@ function calcPoints(betGoals1, betGoals2, resGoals1, resGoals2) {
 let currentUser = null;
 let matches      = {};
 let userBets     = {};
+let allGroupBets = {};
+let onAllGroupBets = null; // named callback so it can be detached precisely
 let activeTab    = 'matches';
 let stageFilter  = 'all';
+let _matchesNeedsFocus = false; // scroll to the last-played match on next matches render
+let _lastPlayedMatchId = null;  // most recent match already kicked off (set in renderMatches)
+let _nextUpcomingMatchId = null; // next unplayed match (set in renderMatches)
+let _autoLiveTabPending = false; // on first matches load after login, open Live tab if a game is on
+let _autoStageFilterPending = false; // on first matches load, auto-select stage of next upcoming match
 let isAdminMode  = false;
 let isAdminAuthed = false;
 let pendingResultMatchId = null;
@@ -196,6 +236,8 @@ let groupUsersCache = {};
 let groupSwitchMenuOpen = false;
 let pendingJoinCode = null;
 let pendingMode     = null; // 'public' | 'join' | 'create' | null
+const PENDING_JOIN_KEY = 'wc2026_pendingJoin'; // sessionStorage: invite survives reload
+const RETURNING_KEY    = 'wc2026_returning';   // localStorage: has entered a group on this device
 
 // ---- Tournament bets state ----
 let tournamentSettings = { teams: [], scorers: [], winner: null, topScorer: null };
@@ -253,6 +295,74 @@ function matchIsLocked(match) {
     return parseMatchDate(match.date) - new Date() <= 5 * 60 * 1000;
 }
 
+// A match belongs in the Live tab once its bets are locked and until at least an
+// hour after it ends. End time = finishedAt when present, else kickoff + 2h.
+function isInLiveTab(m, now) {
+    if (!m || !m.date) return false;
+    if (!matchIsLocked(m)) return false;                 // bets still open
+    const hasResult = m.result !== null && m.result !== undefined;
+    if (!hasResult) return true;                         // locked + not finished
+    const endTime = m.finishedAt || (parseMatchDate(m.date).getTime() + 2 * 3600 * 1000);
+    return (now - endTime) < 60 * 60 * 1000;             // kept <1h after end
+}
+
+// Live match minute. Uses the API's real elapsed minute (apiMin, captured at `upd`)
+// as the base and ticks forward by wall-clock since then; falls back to estimating
+// from kickoff when no API minute is available yet. Returns '' at halftime (the
+// status badge already says so).
+// A live game whose data hasn't refreshed in LIVE_STALE_MS is "paused" — the live feed
+// stopped (stale node) or never arrived (no node since kickoff). Returns the time of our
+// last live data when paused (updatedAt, or kickoff if we never got a node), else null.
+// Only in-play games run a clock, so only they can be paused.
+const LIVE_STALE_MS = 10 * 60 * 1000;
+function livePausedSince(now, upd, kickoffMs, status) {
+    if (status !== 'IN_PLAY') return null;
+    const ref = (typeof upd === 'number') ? upd : kickoffMs;
+    return (now - ref > LIVE_STALE_MS) ? ref : null;
+}
+
+function computeLiveMinute(now, kickoffMs, elapsed, extra, upd, status, staleMs = LIVE_STALE_MS) {
+    if (status === 'PAUSED' || status === 'FT') return '';   // badge conveys these
+    // When data is stale, freeze the clock at the last real update instead of ticking
+    // forward off wall-clock.
+    const stale = typeof upd === 'number' && (now - upd) > staleMs;
+    const clock = stale ? upd : now;
+    const tick = (upd != null && status === 'IN_PLAY') ? Math.max(0, Math.floor((clock - upd) / 60000)) : 0;
+    if (elapsed == null) {                                    // estimate from kickoff (rough)
+        const est = Math.floor((clock - kickoffMs) / 60000);
+        return est > 90 ? "90+'" : (est < 0 ? 0 : est) + "'";
+    }
+    // API caps elapsed at 45/90; stoppage lives in `extra`, shown as "45+2'" / "90+3'".
+    if (extra != null && extra > 0) return `${elapsed}+${extra + tick}'`;
+    return `${elapsed + tick}'`;
+}
+
+// Re-tick all live-minute labels (called from the 1s interval).
+function updateLiveMinutes() {
+    const now = Date.now();
+    document.querySelectorAll('.live-minute').forEach(el => {
+        const elapsed = el.dataset.min === '' ? null : +el.dataset.min;
+        const extra = el.dataset.extra === '' ? null : +el.dataset.extra;
+        const upd = el.dataset.upd === '' ? null : +el.dataset.upd;
+        const status = el.dataset.status;
+        const kickoff = +el.dataset.kickoff;
+        const hasNode = +el.dataset.hasnode;   // 1 = a live node exists; 0 = no data yet
+        const pausedSince = livePausedSince(now, upd, kickoff, status);
+        const paused = pausedSince !== null;
+        // Minute: hide for no-data paused; otherwise compute (freezes had-data via staleMs).
+        el.textContent = (paused && hasNode === 0) ? '' : computeLiveMinute(now, kickoff, elapsed, extra, upd, status);
+        const card = el.closest('.live-card');
+        if (!card) return;
+        card.classList.toggle('live-stale', paused);
+        if (paused) {
+            const ago = card.querySelector('.live-stale-ago');
+            if (ago) ago.textContent = (hasNode ? t('live.updatedAgo') : t('live.noLiveData'))
+                .replace('{n}', String(Math.round((now - pausedSince) / 60000)));
+            if (hasNode === 0) { const sc = card.querySelector('.live-score'); if (sc) sc.textContent = '–'; }
+        }
+    });
+}
+
 function formatCountdown(ms) {
     if (ms <= 0) return t('match.started');
     const s = Math.floor(ms / 1000);
@@ -270,6 +380,7 @@ setInterval(() => {
         const diff = parseMatchDate(el.dataset.matchDate) - new Date();
         el.textContent = formatCountdown(diff);
     });
+    updateLiveMinutes();
 }, 1000);
 
 function $ (id) { return document.getElementById(id); }
@@ -290,6 +401,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const joinCode = (params.get('join') || '').trim().toUpperCase();
     if (joinCode && /^[A-Z0-9]{6}$/.test(joinCode)) {
         pendingJoinCode = joinCode;
+        try { sessionStorage.setItem(PENDING_JOIN_KEY, joinCode); } catch (e) {}
+    } else {
+        // Restore an in-progress invite across a reload. routeAfterLogin strips
+        // ?join from the URL, so a refresh / address-bar Enter would otherwise
+        // arrive with no code and strand the user on the mode-choice screen.
+        // Cleared only once the join actually succeeds (or on logout).
+        try {
+            const saved = sessionStorage.getItem(PENDING_JOIN_KEY);
+            if (saved && /^[A-Z0-9]{6}$/.test(saved)) pendingJoinCode = saved;
+        } catch (e) {}
     }
 
     if (isAdminMode) {
@@ -297,6 +418,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     $('btn-google-login').addEventListener('click', handleGoogleLogin);
+    $('btn-google-login-mode').addEventListener('click', handleGoogleLogin);
     $('email-login-form').addEventListener('submit', handleEmailLogin);
 
     $('btn-mode-public').addEventListener('click',  () => { pendingMode = 'public';  showLoginScreen(); });
@@ -360,10 +482,23 @@ function showModeChoice() {
     hide('admin-panel');
 }
 
-// Entry screen for users with no identity yet.
+// Entry screen for users with no identity yet. Returning users (anyone who has
+// entered a group on this device) go straight to the login screen so they can
+// just sign in again and land back in their group — no invite code needed, and
+// no confusing mode-choice detour. Only genuinely new users see mode-choice.
 function showInitialScreen() {
-    if (pendingJoinCode || isAdminMode) showLoginScreen();
+    if (pendingJoinCode || isAdminMode) { showLoginScreen(); return; }
+    let returning = false;
+    try { returning = localStorage.getItem(RETURNING_KEY) === '1'; } catch (e) {}
+    if (returning) showLoginScreen();
     else showModeChoice();
+}
+
+// Drop the pending invite everywhere: state, the reload-survival store, and the URL.
+function clearPendingJoin() {
+    pendingJoinCode = null;
+    try { sessionStorage.removeItem(PENDING_JOIN_KEY); } catch (e) {}
+    if (location.search.includes('join=')) history.replaceState({}, '', location.pathname);
 }
 
 // Decide which screen to show once we have an identity (currentUser). Pure and
@@ -380,11 +515,17 @@ async function routeAfterLogin(force) {
         if (!db) { showGroupPicker(); return; }
 
         if (pendingJoinCode) {
-            const code = pendingJoinCode;
-            pendingJoinCode = null;
-            history.replaceState({}, '', location.pathname);
-            const joined = await autoJoinByCode(code);
-            if (joined) return;
+            const result = await autoJoinByCode(pendingJoinCode);
+            if (result === true) {            // joined for real — done
+                clearPendingJoin();
+                return;
+            }
+            if (result === 'invalid') {       // bad code — give up, route normally
+                clearPendingJoin();
+            }
+            // else: transient failure (auth token not ready on the fast path, or a
+            // network/permission blip). KEEP pendingJoinCode so the next routing
+            // pass — after onAuthStateChanged establishes the token — retries it.
         }
 
         const snap = await ref(`userGroups/${currentUser.userId}`).once('value');
@@ -422,7 +563,7 @@ async function autoJoinByCode(code) {
         }
         if (!snap.exists()) {
             alert(t('joinGroup.errorInvalid'));
-            return false;
+            return 'invalid'; // definitively bad code — caller stops retrying
         }
         const groupId = snap.val();
         const memberSnap = await ref(`groups/${groupId}/members/${currentUser.userId}`).once('value');
@@ -484,12 +625,18 @@ async function ensureUserProfile() {
 function enterAppForGroup(groupId) {
     currentGroupId = groupId;
     localStorage.setItem('wc2026_activeGroup', groupId);
+    try { localStorage.setItem(RETURNING_KEY, '1'); } catch (e) {} // returning user from now on
     hide('login-screen');
     hide('group-picker-screen');
+    hide('mode-choice-screen'); // default-visible screen — must be hidden or it stacks above the app
+    hide('admin-panel');
     show('main-app');
     $('header-username').textContent = currentUser.name;
     ensureUserProfile();
+    _autoLiveTabPending = true;                             // open Live tab on first load if a game is on
+    _autoStageFilterPending = true;                         // auto-select stage of next upcoming match
     startFirebaseListeners();
+    if (activeTab === 'matches') _matchesNeedsFocus = true; // focus next-upcoming on first load too
     renderCurrentTab();
 }
 
@@ -619,9 +766,14 @@ async function setupUserFromAuth(firebaseUser) {
     saveUserSession(currentUser);
 }
 
+// Google sign-in is offered on both the login screen and the mode-choice screen,
+// so surface errors on whichever error element is present/visible.
+function loginErrorEls() {
+    return ['login-error', 'mode-login-error'].map(id => $(id)).filter(Boolean);
+}
+
 async function handleGoogleLogin() {
-    const errEl = $('login-error');
-    hideEl(errEl);
+    loginErrorEls().forEach(hideEl);
     if (!auth) return;
     try {
         const provider = new firebase.auth.GoogleAuthProvider();
@@ -637,8 +789,7 @@ async function handleGoogleLogin() {
         ) {
             msg = 'כניסה עם Google לא נתמכת בדפדפן המובנה (WhatsApp/Telegram). אנא פתח את ' + window.location.hostname + ' ב-Safari או Chrome.';
         }
-        errEl.textContent = msg;
-        showEl(errEl);
+        loginErrorEls().forEach(el => { el.textContent = msg; showEl(el); });
     }
 }
 
@@ -682,6 +833,11 @@ function stopGroupListeners() {
     if (!db || !currentGroupId || !currentUser) return;
     ref(`groups/${currentGroupId}/members`).off();
     ref(`bets/${currentGroupId}/${currentUser.userId}`).off();
+    if (onAllGroupBets) {
+        ref(`bets/${currentGroupId}`).off('value', onAllGroupBets);
+        onAllGroupBets = null;
+    }
+    allGroupBets = {};
 }
 
 function handleLogout() {
@@ -698,9 +854,11 @@ function handleLogout() {
     userGroups     = {};
     groupMembers   = {};
     groupUsersCache = {};
-    matches  = {};
-    userBets = {};
+    matches      = {};
+    userBets     = {};
+    allGroupBets = {};
     localStorage.removeItem('wc2026_activeGroup');
+    clearPendingJoin();
     showInitialScreen();
 }
 
@@ -723,9 +881,20 @@ function startFirebaseListeners() {
 
     ref('matches').on('value', snap => {
         matches = snap.val() || {};
+        // On first load after login, jump straight to the Live tab if a game is on.
+        if (_autoLiveTabPending) {
+            _autoLiveTabPending = false;
+            if (hasLiveGameNow()) { switchTab('live'); return; }  // switchTab renders
+        }
+        // On first load, set the stage filter to the stage of the next upcoming match.
+        if (_autoStageFilterPending) {
+            _autoStageFilterPending = false;
+            applyAutoStageFilter();
+        }
         if (activeTab === 'matches') renderMatches();
         if (activeTab === 'my-bets') renderMyBets();
         if (activeTab === 'tournament') renderTournament();
+        if (activeTab === 'live') renderLive();
     }, permissionError);
 
     ref('settings/tournament').on('value', snap => {
@@ -782,7 +951,12 @@ function startFirebaseListeners() {
                 try { await ref(`users/${uid}`).set({ name: groupMembers[uid].name }); } catch(e) {}
             }
         }));
+        // Names for members whose name lives only in users/{uid} are resolved above
+        // (into groupUsersCache). Re-render the active name-showing tab so they replace
+        // the "unknown user" fallback instead of waiting for the next data update.
         if (activeTab === 'leaderboard') renderLeaderboard();
+        else if (activeTab === 'live') renderLive();
+        else if (activeTab === 'matches') renderMatches();
     }, () => {});
 
     if (currentUser) {
@@ -797,6 +971,13 @@ function startFirebaseListeners() {
             if (activeTab === 'tournament') renderTournament();
         }, () => {});
     }
+
+    onAllGroupBets = snap => {
+        allGroupBets = snap.val() || {};
+        if (activeTab === 'live' && typeof renderLive === 'function') renderLive();
+        if (activeTab === 'matches') renderMatches();
+    };
+    ref(`bets/${currentGroupId}`).on('value', onAllGroupBets, () => {});
 }
 
 // ============================================================
@@ -805,6 +986,7 @@ function startFirebaseListeners() {
 
 function switchTab(tab) {
     activeTab = tab;
+    if (tab === 'matches') _matchesNeedsFocus = true; // focus last-played when opening the tab
     document.querySelectorAll('.tab-bar:not(.admin-tab-bar) .tab-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.tab === tab);
     });
@@ -813,6 +995,10 @@ function switchTab(tab) {
         p.style.display = p.id === `tab-${tab}` ? 'block' : 'none';
     });
     renderCurrentTab();
+    // Tabs share the page scroll, and opening משחקים scrolls down to the last-played
+    // match. Without resetting, every other tab inherits that bottom scroll. Matches
+    // manages its own scroll via the focus logic, so only reset for the rest.
+    if (tab !== 'matches') window.scrollTo(0, 0);
 }
 
 function renderCurrentTab() {
@@ -820,6 +1006,7 @@ function renderCurrentTab() {
     else if (activeTab === 'leaderboard') renderLeaderboard();
     else if (activeTab === 'my-bets')     renderMyBets();
     else if (activeTab === 'tournament')  renderTournament();
+    else if (activeTab === 'live')        renderLive();
 
     if (activeTab === 'tournament') startTournamentCountdown();
     else stopTournamentCountdown();
@@ -827,10 +1014,35 @@ function renderCurrentTab() {
 
 function setStageFilter(stage) {
     stageFilter = stage;
+    _autoStageFilterPending = false; // user is choosing; don't override later
     document.querySelectorAll('.filter-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.stage === stage);
     });
     renderMatches();
+}
+
+function findNextUpcomingMatchStage() {
+    const now = Date.now();
+    let best = null;
+    Object.entries(matches).forEach(([id, m]) => {
+        if (!m || !m.date || !m.stage) return;
+        if (m.stage === 'special') return;
+        if (m.result) return;
+        const t = parseMatchDate(m.date).getTime();
+        if (isNaN(t) || t < now) return;
+        if (!best || t < best.t) best = { id, stage: m.stage, t };
+    });
+    return best;
+}
+
+function applyAutoStageFilter() {
+    if (!matches || Object.keys(matches).length === 0) return;
+    const next = findNextUpcomingMatchStage();
+    if (!next || !next.stage) return;
+    stageFilter = next.stage;
+    document.querySelectorAll('.filter-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.stage === stageFilter);
+    });
 }
 
 function switchTournament(key) {
@@ -843,7 +1055,8 @@ function switchTournament(key) {
     stageFilter = 'all';
 
     const cfg = TOURNAMENTS[key];
-    $('app-bar-title').textContent = `${cfg.icon} ${cfg.label}`;
+    const titleEl = $('app-bar-title'); // removed from the slim main-app header; admin still has one
+    if (titleEl) titleEl.textContent = `${cfg.icon} ${cfg.label}`;
 
     document.querySelectorAll('.tournament-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.tournament === key);
@@ -865,6 +1078,7 @@ function switchTournament(key) {
             if (activeTab === 'matches') renderMatches();
             if (activeTab === 'my-bets') renderMyBets();
             if (activeTab === 'tournament') renderTournament();
+            if (activeTab === 'live') renderLive();
         }, () => {});
     }
 
@@ -905,6 +1119,18 @@ function renderMatches() {
     const matchList = regularMatches
         .filter(m => stageFilter === 'all' || m.stage === stageFilter);
 
+    // Track the most recent match already kicked off (list is sorted ascending),
+    // so opening the tab can focus it instead of the top of the schedule.
+    const _now = new Date();
+    let lastPlayed = null;
+    let nextUpcoming = null;
+    for (const m of matchList) {
+        if (parseMatchDate(m.date) <= _now) lastPlayed = m;
+        else if (!nextUpcoming) nextUpcoming = m;
+    }
+    _lastPlayedMatchId = lastPlayed ? lastPlayed.id : null;
+    _nextUpcomingMatchId = nextUpcoming ? nextUpcoming.id : null;
+
     if (matchList.length === 0) {
         container.innerHTML = `<p class="state-msg">${t('match.emptyState')}</p>`;
     } else {
@@ -920,6 +1146,34 @@ function renderMatches() {
         c.querySelectorAll('.bet-edit-link').forEach(btn => {
             btn.addEventListener('click', () => unlockBetEdit(btn.dataset.matchId));
         });
+        c.querySelectorAll('.breakdown-toggle').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const el = document.getElementById(`breakdown-${btn.dataset.matchId}`);
+                if (el) el.classList.toggle('hidden');
+            });
+        });
+    });
+
+    // On first open of the matches tab, focus the next upcoming match (or the most
+    // recent already-kicked-off match as a fallback). Only fires when the tab was
+    // just opened, not on every background data refresh — that would yank scroll.
+    const focusId = _nextUpcomingMatchId || _lastPlayedMatchId;
+    if (_matchesNeedsFocus && focusId) {
+        _matchesNeedsFocus = false;
+        scrollToFocusMatch(focusId, !!_nextUpcomingMatchId);
+    }
+}
+
+function scrollToFocusMatch(id, highlight) {
+    if (!id) return;
+    requestAnimationFrame(() => {
+        const el = document.getElementById(`card-${id}`);
+        if (!el) return;
+        el.scrollIntoView({ block: 'center' });
+        if (highlight) {
+            el.classList.add('match-card-next');
+            setTimeout(() => el.classList.remove('match-card-next'), 2200);
+        }
     });
 }
 
@@ -945,7 +1199,9 @@ function buildMatchCard(m) {
     let middleHtml = '';
     let betAreaHtml = '';
     if (hasResult) {
-        middleHtml = `<div class="result-score">${m.result.team1Goals} – ${m.result.team2Goals}</div>`;
+        middleHtml = `<div class="result-score">${m.result.team1Goals} – ${m.result.team2Goals}</div>`
+            + (m.resultAet && (m.resultAet.team1Goals !== m.result.team1Goals || m.resultAet.team2Goals !== m.result.team2Goals)
+                ? `<div class="result-aet">${t('match.aet')} ${m.resultAet.team1Goals}–${m.resultAet.team2Goals}</div>` : '');
     } else if (locked) {
         if (bet) {
             middleHtml = `
@@ -989,13 +1245,42 @@ function buildMatchCard(m) {
     if (!m.noPoints) {
         if (hasResult && bet && bet.points !== null && bet.points !== undefined) {
             const pts = bet.points;
-            const cls = pts >= 3 ? 'points-3' : pts === 1 ? 'points-1' : 'points-0';
-            const emoji = pts >= 3 ? '🎯' : pts === 1 ? '✅' : '❌';
+            const cls = pts >= 4 ? 'points-3' : pts > 0 ? 'points-1' : 'points-0';
+            const emoji = pts >= 4 ? '🎯' : pts > 0 ? '✅' : '❌';
             pointsHtml = `<div class="match-points-row ${cls}">${emoji} ${t('match.pointsRow')}: ${bet.team1Goals}–${bet.team2Goals} | ${pts} ${t('match.pointsLabel')}</div>`;
         } else if (hasResult && !bet) {
             pointsHtml = `<div class="match-points-row points-na">${t('match.noBetRow')}</div>`;
         }
     }
+
+    let breakdownHtml = '';
+    if (hasResult) {
+        const nameForUid = uid => (groupUsersCache[uid] && groupUsersCache[uid].name)
+            || (groupMembers[uid] && groupMembers[uid].name) || t('groupSettings.unknownUser');
+        const orderedUids = Object.keys(groupMembers).sort((a, b) =>
+            (((groupMembers[b] && groupMembers[b].totalPoints) || 0) - ((groupMembers[a] && groupMembers[a].totalPoints) || 0))
+            || nameForUid(a).localeCompare(nameForUid(b)));
+        const rows = orderedUids.map(uid => {
+            const name = nameForUid(uid);
+            const b = (allGroupBets[uid] || {})[m.id];
+            const betStr = b ? `${b.team1Goals}–${b.team2Goals}` : '—';
+            const pts = b ? calcPoints(b.team1Goals, b.team2Goals, m.result.team1Goals, m.result.team2Goals, m.stage) : 0;
+            const cls = pts >= 4 ? 'points-3' : pts > 0 ? 'points-1' : 'points-0';
+            return `<div class="live-person-row ${cls}"><span class="lp-name">${escapeHtml(name)}</span><span class="lp-bet">${betStr}</span><span class="lp-pts">${pts}</span></div>`;
+        }).join('');
+        breakdownHtml = `
+        <button class="breakdown-toggle" data-match-id="${m.id}">${t('match.showBreakdown')}</button>
+        <div class="match-breakdown hidden" id="breakdown-${m.id}">
+            <div class="live-person-row live-person-head"><span>${t('match.yourBet')}</span><span></span><span>${t('match.pointsLabel')}</span></div>
+            ${rows}
+        </div>`;
+    }
+
+    const matchScorers = Array.isArray(m.scorers) ? m.scorers : [];
+    const matchScorersCol = team => matchScorers.filter(s => s.team === team).map(scorerLine).join('');
+    const scorersHtml = matchScorers.length
+        ? `<div class="live-scorers"><div class="live-scorers-col">${matchScorersCol(1)}</div><div class="live-scorers-col">${matchScorersCol(2)}</div></div>`
+        : '';
 
     return `
     <div class="match-card${closingSoon ? ' match-card--closing-soon' : ''}" id="card-${m.id}">
@@ -1016,8 +1301,10 @@ function buildMatchCard(m) {
                     <span class="team-name">${translateTeam(m.team2)}</span>
                 </div>
             </div>
+            ${scorersHtml}
             ${betAreaHtml}
             ${pointsHtml}
+            ${breakdownHtml}
         </div>
     </div>`;
 }
@@ -1060,6 +1347,198 @@ function unlockBetEdit(matchId) {
 
 
 // ============================================================
+// RENDER: LIVE TAB
+// ============================================================
+
+function renderLive() {
+    const container = $('live-container');
+    if (!container) return;
+    const now = Date.now();
+    const games = Object.entries(matches)
+        .map(([id, m]) => ({ id, ...m }))
+        .filter(m => (!m.tournament || m.tournament === activeTournament) && m.stage !== 'special')
+        .filter(m => isInLiveTab(m, now))
+        // Active games (in-play / locked-not-started) on top, sorted by kickoff so the
+        // current/soonest game leads. Finished games sink below (most recently ended
+        // first) and still auto-clear 1h after they end via isInLiveTab.
+        .sort((a, b) => {
+            const aDone = a.result !== null && a.result !== undefined;
+            const bDone = b.result !== null && b.result !== undefined;
+            if (aDone !== bDone) return aDone ? 1 : -1;
+            if (!aDone) return parseMatchDate(a.date) - parseMatchDate(b.date);
+            const endA = a.finishedAt || (parseMatchDate(a.date).getTime() + 2 * 3600 * 1000);
+            const endB = b.finishedAt || (parseMatchDate(b.date).getTime() + 2 * 3600 * 1000);
+            return endB - endA;
+        });
+
+    if (games.length === 0) { container.innerHTML = `<p class="state-msg">${t('live.empty')}</p>`; return; }
+    // Combined standings across ALL live games, computed once and shared by every card.
+    const standings = projectLiveStandings(games, groupMembers, allGroupBets, now);
+    container.innerHTML = games.map(m => buildLiveCard(m, standings)).join('');
+}
+
+// Projected live standings across ALL currently-live games, so concurrent games
+// accumulate. Pure. For each member: currentTotal − Σ already-counted + Σ provisional
+// over every scored game (a finalized game nets 0; an in-play game adds its live points).
+function projectLiveStandings(games, members, bets, now) {
+    const uids = Object.keys(members || {});
+    const nameOf = uid => (groupUsersCache[uid] && groupUsersCache[uid].name) || (members[uid] && members[uid].name) || t('groupSettings.unknownUser');
+    const scoreOf = g => {
+        const hasResult = g.result !== null && g.result !== undefined;
+        const started = parseMatchDate(g.date).getTime() <= now;
+        return hasResult ? g.result : (g.live ? g.live : (started ? { team1Goals: 0, team2Goals: 0 } : null));
+    };
+    const scored = (games || []).map(g => ({ g, s: scoreOf(g) })).filter(x => x.s);
+    const currentTotal = uid => (members[uid] && members[uid].totalPoints) || 0;
+    const projectedTotal = {};
+    for (const uid of uids) {
+        let delta = 0;
+        for (const { g, s } of scored) {
+            const b = (bets[uid] || {})[g.id];
+            const provisional = calcPoints(b ? b.team1Goals : 0, b ? b.team2Goals : 0, s.team1Goals, s.team2Goals, g.stage);
+            const counted = (b && typeof b.points === 'number') ? b.points : 0;
+            delta += provisional - counted;
+        }
+        projectedTotal[uid] = currentTotal(uid) + delta;
+    }
+    const oldPos = {};
+    [...uids].sort((a, b) => currentTotal(b) - currentTotal(a) || nameOf(a).localeCompare(nameOf(b)))
+        .forEach((uid, i) => { oldPos[uid] = i + 1; });
+    const orderedUids = Array.from(uids).sort((a, b) =>
+        projectedTotal[b] - projectedTotal[a] || currentTotal(b) - currentTotal(a) || nameOf(a).localeCompare(nameOf(b)));
+    return { orderedUids, projectedTotal, oldPos };
+}
+
+function buildLiveCard(m, ctx) {
+    const live = m.live || null;
+    const liveStatus = live ? live.status : null;            // 'IN_PLAY' | 'PAUSED' | 'FT'
+    const hasResult = m.result !== null && m.result !== undefined;
+    const kickoffMs = parseMatchDate(m.date).getTime();
+    const started = kickoffMs <= Date.now();
+    const isFt = liveStatus === 'FT';                        // API says full-time (await official result)
+    const isPaused = liveStatus === 'PAUSED';
+    const inPlay = started && !hasResult && !isFt && !isPaused;  // actively playing (IN_PLAY or pre-node estimate)
+    // "Paused": in-play but no fresh live data — the feed died (stale node) or none has
+    // arrived since kickoff (e.g. API down). pausedSince = last data time (updatedAt, or
+    // kickoff if we never got a node).
+    const liveUpd = (live && typeof live.updatedAt === 'number') ? live.updatedAt : null;
+    const hadData = !!live;
+    const pausedSince = inPlay ? livePausedSince(Date.now(), liveUpd, kickoffMs, 'IN_PLAY') : null;
+    const paused = pausedSince !== null;
+    const noDataPaused = paused && !hadData;
+    // Score: official result → live node (incl. FT) → 0-0 once kicked off → none (locked
+    // pre-kickoff). When paused with NO data ever, show "–" (no real score to show).
+    const score = hasResult ? m.result
+                : live ? live
+                : started ? { team1Goals: 0, team2Goals: 0 }
+                : null;
+
+    let statusKey, badgeClass, dot = '';
+    if (hasResult || isFt) { statusKey = 'match.status.completed'; badgeClass = 'badge-completed'; }  // game over
+    else if (isPaused) { statusKey = 'live.statusHalftime'; badgeClass = 'badge-live'; dot = '<span class="live-dot"></span>'; }
+    else if (inPlay) { statusKey = 'live.statusLive'; badgeClass = 'badge-live'; dot = '<span class="live-dot"></span>'; }
+    else { statusKey = 'live.statusLocked'; badgeClass = 'badge-locked'; }   // locked, not started yet
+
+    const scoreHtml = noDataPaused
+        ? '–'
+        : (score
+            ? `${score.team1Goals}<span class="live-score-sep">–</span>${score.team2Goals}`
+            : `<span class="live-not-started">${t('live.notStarted')}</span>`);
+
+    const scorers = Array.isArray(m.scorers) ? m.scorers : ((live && Array.isArray(live.scorers)) ? live.scorers : []);
+    const scorersCol = team => scorers.filter(s => s.team === team).map(scorerLine).join('');
+    const scorersHtml = scorers.length
+        ? `<div class="live-scorers"><div class="live-scorers-col">${scorersCol(1)}</div><div class="live-scorers-col">${scorersCol(2)}</div></div>`
+        : '';
+
+    // Projected live leaderboard: each member's current total + this match's
+    // provisional points, ranked, with medals (🥇🥈🥉) and ↑/↓ vs their current spot.
+    const nameOf = uid => (groupUsersCache[uid] && groupUsersCache[uid].name) || (groupMembers[uid] && groupMembers[uid].name) || t('groupSettings.unknownUser');
+    // This card's OWN provisional points (for the +N pill / pick). Missing bet = 0–0,
+    // matching the updater's auto-fill.
+    const matchOf = uid => { if (!score) return 0; const b = (allGroupBets[uid] || {})[m.id]; return calcPoints(b ? b.team1Goals : 0, b ? b.team2Goals : 0, score.team1Goals, score.team2Goals, m.stage); };
+    const betOf  = uid => { const b = (allGroupBets[uid] || {})[m.id]; return b ? `${b.team1Goals}–${b.team2Goals}` : '0–0'; };
+    // Standings are computed once across ALL live games (so concurrent games accumulate)
+    // and shared via ctx — every live card shows the same combined projected total.
+    const { orderedUids, projectedTotal, oldPos } = ctx;
+
+    const rowsHtml = orderedUids.map((uid, i) => {
+        const rank  = i + 1;
+        const isMe  = currentUser && uid === currentUser.userId;
+        const mp    = matchOf(uid);
+        const total = projectedTotal[uid];
+        const delta = oldPos[uid] - rank;   // > 0 = climbed
+        const chg   = delta > 0 ? `<span class="live-lb-chg up">▲${delta}</span>`
+                    : delta < 0 ? `<span class="live-lb-chg down">▼${-delta}</span>` : '';
+        const rankLabel = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
+        const meTag = isMe ? ` <span class="lb-me-tag">${t('leaderboard.meTag')}</span>` : '';
+        const pillCls = !score ? 'p0' : mp >= 4 ? 'p4' : mp > 0 ? 'p1' : 'p0';
+        const pillTxt = (!score || mp === 0) ? '–' : `+${mp}`;
+        return `<div class="live-lb-row ${isMe ? 'is-me' : ''}">`
+             + `<span class="live-lb-chgcol">${chg}</span>`
+             + `<span class="live-lb-rank">${rankLabel}</span>`
+             + `<span class="live-lb-name">${memberLabel(uid, nameOf(uid))}${meTag}</span>`
+             + `<span class="live-lb-total">${total}</span>`
+             + `<span class="live-lb-pill ${pillCls}">${pillTxt}</span>`
+             + `<span class="live-lb-pick">${betOf(uid)}</span>`
+             + `</div>`;
+    }).join('');
+
+    // Live minute label (only while actually playing — not at FT). Data attrs let the
+    // 1s interval tick it between API polls; extra = stoppage minutes ("90+3'").
+    const apiMin = live && typeof live.minute === 'number' ? live.minute : '';
+    const apiExtra = live && typeof live.extra === 'number' ? live.extra : '';
+    const upd = live && live.updatedAt ? live.updatedAt : '';
+    const minStatus = isPaused ? 'PAUSED' : 'IN_PLAY';
+    const minuteHtml = (inPlay || isPaused)
+        ? `<span class="live-minute" data-kickoff="${kickoffMs}" data-min="${apiMin}" data-extra="${apiExtra}" data-upd="${upd}" data-status="${minStatus}" data-hasnode="${hadData ? 1 : 0}">${noDataPaused ? '' : computeLiveMinute(Date.now(), kickoffMs, apiMin === '' ? null : apiMin, apiExtra === '' ? null : apiExtra, upd === '' ? null : upd, minStatus)}</span>`
+        : '';
+
+    // "Updates paused" badge — covers a stale feed AND no data since kickoff. The card
+    // carries a live badge and a paused badge; CSS shows one based on the .live-stale class
+    // (set here initially, kept current by updateLiveMinutes).
+    const agoInit = paused
+        ? escapeHtml((hadData ? t('live.updatedAgo') : t('live.noLiveData')).replace('{n}', String(Math.round((Date.now() - pausedSince) / 60000))))
+        : '';
+    const badgeHtml = inPlay
+        ? `<span class="match-status-badge badge-live live-badge-active">${dot}${t('live.statusLive')}</span>`
+          + `<span class="match-status-badge badge-stale live-badge-stale">⏸ <span class="live-stale-ago">${agoInit}</span></span>`
+        : `<span class="match-status-badge ${badgeClass}">${dot}${t(statusKey)}</span>`;
+
+    return `
+    <div class="match-card live-card${paused ? ' live-stale' : ''}" id="live-${m.id}">
+        <div class="match-card-header">
+            <span class="match-date-str">${formatDate(m.date)}</span>
+            ${badgeHtml}
+        </div>
+        <div class="live-scoreline">
+            <span class="live-team">${getFlag(m.team1)} <span class="live-team-name">${escapeHtml(translateTeam(m.team1))}</span></span>
+            <span class="live-score-wrap"><span class="live-score">${scoreHtml}</span>${minuteHtml}</span>
+            <span class="live-team">${getFlag(m.team2)} <span class="live-team-name">${escapeHtml(translateTeam(m.team2))}</span></span>
+        </div>
+        ${scorersHtml}
+        <div class="live-people">
+            <div class="live-lb-row live-lb-head"><span class="live-lb-chgcol"></span><span class="live-lb-rank">#</span><span class="live-lb-name"></span><span class="live-lb-total">${t('live.total')}</span><span class="live-lb-pill">±</span><span class="live-lb-pick">${t('match.yourBet')}</span></div>
+            ${rowsHtml}
+        </div>
+    </div>`;
+}
+
+// True when a game of the active tournament is currently in progress (started, not
+// finished, within the in-play window) — used to auto-open the Live tab on login.
+function hasLiveGameNow() {
+    const now = Date.now();
+    return Object.values(matches || {}).some(m => {
+        if (!m || !m.team1 || !m.date) return false;
+        if (m.tournament && m.tournament !== activeTournament) return false;
+        if (m.stage === 'special') return false;
+        if (m.result && m.result.team1Goals !== undefined) return false;
+        const k = parseMatchDate(m.date).getTime();
+        return k <= now && (now - k) <= 3 * 60 * 60 * 1000;
+    });
+}
+
+// ============================================================
 // RENDER: LEADERBOARD
 // ============================================================
 
@@ -1079,6 +1558,28 @@ function renderLeaderboard() {
         return;
     }
 
+    // "Form": each member's points in the last 5 finished matches (oldest→newest),
+    // shown as colored dots (gold = exact 4, green = correct 1, gray = miss 0).
+    // Ordered by KICKOFF date (same comparator as the Matches tab) — not finishedAt,
+    // which is the updater's write time and gets reset when a game is re-finalized (VAR),
+    // making games jump around out of chronological order.
+    const last5 = Object.entries(matches)
+        .map(([id, mm]) => ({ id, ...mm }))
+        .filter(mm => (!mm.tournament || mm.tournament === activeTournament) && mm.stage !== 'special'
+                   && mm.result && mm.result.team1Goals !== undefined)
+        .sort((a, b) => {
+            const diff = parseMatchDate(a.date) - parseMatchDate(b.date);
+            if (diff !== 0) return diff;
+            return (a.group || '').localeCompare(b.group || '');
+        })
+        .slice(-5);
+    const formHtml = uid => last5.map(fm => {
+        const p = ((allGroupBets[uid] || {})[fm.id] || {}).points;
+        const pts = (p === undefined || p === null) ? 0 : p;
+        const cls = pts >= 4 ? 'f4' : pts > 0 ? 'f1' : 'f0';
+        return `<span class="lb-form-dot ${cls}">${pts}</span>`;
+    }).join('');
+
     let html = '<div class="leaderboard-table">';
     entries.forEach((u, i) => {
         const rank    = i + 1;
@@ -1088,7 +1589,8 @@ function renderLeaderboard() {
         html += `
         <div class="leaderboard-row ${isMe ? 'is-me' : ''}">
             <span class="lb-rank">${medal}</span>
-            <span class="lb-name">${escapeHtml(u.name)} ${meTag}</span>
+            <span class="lb-name">${memberLabel(u.userId, u.name)} ${meTag}</span>
+            <span class="lb-form">${formHtml(u.userId)}</span>
             <span class="lb-points">${u.totalPoints} <span class="lb-pts-label">${t('common.pts')}</span></span>
         </div>`;
     });
@@ -1122,7 +1624,7 @@ function renderMyBets() {
 
         let ptsBadge = '';
         if (hasResult && pts !== null && pts !== undefined) {
-            const cls = pts >= 3 ? 'points-3' : pts === 1 ? 'points-1' : 'points-0';
+            const cls = pts >= 4 ? 'points-3' : pts > 0 ? 'points-1' : 'points-0';
             ptsBadge = `<span class="match-points-row ${cls}" style="display:inline-block;padding:2px 10px;">${pts} ${t('common.pts')}</span>`;
         }
 
@@ -1613,6 +2115,7 @@ async function saveResult() {
 
 async function recalcPoints(matchId, resG1, resG2) {
     if (!db) return;
+    const stage = (matches[matchId] || {}).stage;
 
     const groupsSnap = await ref('groups').once('value');
     const groupsData = groupsSnap.val() || {};
@@ -1624,11 +2127,11 @@ async function recalcPoints(matchId, resG1, resG2) {
             const betSnap = await ref(`bets/${groupId}/${userId}/${matchId}`).once('value');
             if (!betSnap.exists()) {
                 // Write the full auto-fill object in one path to avoid conflicting parent/child writes
-                const pts = calcPoints(0, 0, resG1, resG2);
+                const pts = calcPoints(0, 0, resG1, resG2, stage);
                 updates[`bets/${groupId}/${userId}/${matchId}`] = { team1Goals: 0, team2Goals: 0, placedAt: 0, points: pts };
             } else {
                 const bet = betSnap.val();
-                const pts = calcPoints(bet.team1Goals, bet.team2Goals, resG1, resG2);
+                const pts = calcPoints(bet.team1Goals, bet.team2Goals, resG1, resG2, stage);
                 updates[`bets/${groupId}/${userId}/${matchId}/points`] = pts;
             }
         }

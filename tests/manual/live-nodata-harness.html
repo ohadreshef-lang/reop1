@@ -1,0 +1,22 @@
+<!doctype html><meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<body style="direction:rtl">
+<div id="tab-live" class="tab-panel active"><div id="live-container" class="app-content"></div></div>
+<script>window.firebase=undefined;window.db=null;window.currentUser={userId:'u1'};
+window.t=k=>({'live.statusLive':'משחק חי','live.notStarted':'טרם החל','live.total':'סה"כ','live.updatedAgo':'עודכן לפני {n} דק׳','live.noLiveData':'אין עדכון חי · {n} דק׳','leaderboard.meTag':'אני','match.yourBet':'ניחוש','groupSettings.unknownUser':'?','live.empty':'אין'}[k]||k);
+window.translateTeam=n=>n;window.currentLang='he';</script>
+<script src="../../app.js?cb=1"></script>
+<script>
+  const ago=ms=>new Date(Date.now()-ms).toISOString().slice(0,16);
+  // Started 30 min ago, NO live node (API down from kickoff) -> should be paused/no-data.
+  Object.assign(matches,{g:{team1:'סנגל',team2:'עיראק',date:ago(30*60000),group:'A',stage:'group'}});
+  Object.assign(groupMembers,{u1:{name:'A',totalPoints:10}});
+  Object.assign(groupUsersCache,groupMembers);
+  Object.assign(allGroupBets,{u1:{g:{team1Goals:1,team2Goals:0}}});
+  window.activeTournament='worldcup2026';window.stageFilter='all';renderLive();updateLiveMinutes();
+  const card=document.querySelector('.live-card');
+  const score=(card.querySelector('.live-score')||{}).textContent||'';
+  const min=(card.querySelector('.live-minute')||{}).textContent||'';
+  const ago2=(card.querySelector('.live-stale-ago')||{}).textContent||'';
+  document.title='STALE:'+card.classList.contains('live-stale')+' DASH:'+(score.trim()==='–')+' MINEMPTY:'+(min==='')+' AGON:'+/\d/.test(ago2);
+</script></body>

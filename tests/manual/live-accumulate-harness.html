@@ -1,0 +1,33 @@
+<!doctype html><meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<body style="direction:rtl">
+<div id="tab-live" class="tab-panel active"><div id="live-container" class="app-content"></div></div>
+<script>window.firebase=undefined;window.db=null;window.currentUser={userId:'u1'};
+window.t=k=>({'live.statusLive':'משחק חי','live.notStarted':'טרם החל','live.total':'סה"כ','leaderboard.meTag':'אני','match.yourBet':'ניחוש','groupSettings.unknownUser':'?','live.empty':'אין'}[k]||k);
+window.translateTeam=n=>n;window.currentLang='he';</script>
+<script src="../../app.js?cb=1"></script>
+<script>
+  const ago=ms=>new Date(Date.now()-ms).toISOString().slice(0,16);
+  // Two in-play games. u1 gains only in g1, u2 gains only in g2 -> combined totals must
+  // appear identically on BOTH cards, while each card's pill reflects its own game.
+  Object.assign(matches,{
+    g1:{team1:'הולנד',team2:'שוודיה',date:ago(30*60000),group:'A',stage:'group',live:{team1Goals:1,team2Goals:0,status:'IN_PLAY',updatedAt:Date.now()-60000,minute:30}},
+    g2:{team1:'ברזיל',team2:'ספרד',date:ago(30*60000),group:'B',stage:'group',live:{team1Goals:2,team2Goals:1,status:'IN_PLAY',updatedAt:Date.now()-60000,minute:30}},
+  });
+  Object.assign(groupMembers,{u1:{name:'A',totalPoints:10},u2:{name:'B',totalPoints:10}});
+  Object.assign(groupUsersCache,groupMembers);
+  Object.assign(allGroupBets,{
+    u1:{g1:{team1Goals:1,team2Goals:0},g2:{team1Goals:0,team2Goals:0}}, // +4 in g1, 0 in g2 -> 14
+    u2:{g1:{team1Goals:0,team2Goals:0},g2:{team1Goals:2,team2Goals:1}}, // 0 in g1, +4 in g2 -> 14
+  });
+  window.activeTournament='worldcup2026';window.stageFilter='all';renderLive();
+  const cards=[...document.querySelectorAll('.live-card')];
+  const totalsOf=c=>[...c.querySelectorAll('.live-lb-total')].map(e=>e.textContent).join(',');
+  const sameTotals = cards.length===2 && totalsOf(cards[0])===totalsOf(cards[1]);
+  // both u1 and u2 should project to 14 (10 + their one +4)
+  const has14 = totalsOf(cards[0]).split(',').filter(x=>x==='14').length===2;
+  // pills differ between the two cards (each shows its own game's contribution)
+  const pills=c=>[...c.querySelectorAll('.live-lb-pill')].map(e=>e.textContent).join(',');
+  const pillsDiffer = cards.length===2 && pills(cards[0])!==pills(cards[1]);
+  document.title='CARDS:'+cards.length+' SAME_TOTALS:'+sameTotals+' BOTH14:'+has14+' PILLS_DIFFER:'+pillsDiffer;
+</script></body>
