@@ -7,7 +7,7 @@
 // - Versioned cache name; bump CACHE_VERSION on each deploy to invalidate stale
 //   assets (mirrors the existing `?v=` cache-busting convention).
 
-const CACHE_VERSION = 'mondial-v20260620b';
+const CACHE_VERSION = 'mondial-v20260702b';
 
 const SHELL_ASSETS = [
     '/',
