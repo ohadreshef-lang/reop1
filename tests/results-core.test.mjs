@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyMatches, buildResultUpdates, parseMatchDate, calcPoints, isKnockoutStage, espnMinute, mapEspnLive, parseEspnGoals, splitKnockoutResult } from '../scripts/lib/results-core.mjs';
+import { classifyMatches, buildResultUpdates, parseMatchDate, calcPoints, isKnockoutStage, espnMinute, mapEspnLive, parseEspnGoals, splitKnockoutResult, fdStageToOurs, resolveHebTeam, utcToNaive, mapScheduledFixtures } from '../scripts/lib/results-core.mjs';
 
 const now = Date.parse('2026-06-17T22:30:00Z'); // 2.5h after the 20:00Z kickoff
 
@@ -334,4 +334,65 @@ test('buildResultUpdates: knockout ET game scores on 90-minute result + writes r
   assert.deepEqual(updates['matches/ko/resultAet'], { team1Goals: 3, team2Goals: 2 }); // 120'
   assert.equal(updates['bets/g1/u1/ko/points'], 2);   // 1-1 vs 2-2 draw -> knockout direction = 2
   assert.equal(updates['bets/g1/u2/ko/points'], 0);   // 3-2 vs 2-2 -> wrong (win1 vs draw) = 0
+});
+
+// --- scheduled-fixture sync ------------------------------------------------
+
+test('fdStageToOurs maps knockout stages; group/unknown -> null', () => {
+  assert.equal(fdStageToOurs('LAST_16'), 'R16');
+  assert.equal(fdStageToOurs('QUARTER_FINALS'), 'QF');
+  assert.equal(fdStageToOurs('SEMI_FINALS'), 'SF');
+  assert.equal(fdStageToOurs('THIRD_PLACE'), '3rd');
+  assert.equal(fdStageToOurs('FINAL'), 'Final');
+  assert.equal(fdStageToOurs('GROUP_STAGE'), null);
+  assert.equal(fdStageToOurs('WHATEVER'), null);
+});
+
+test('resolveHebTeam maps football-data English names (via norm/aliases) to Hebrew', () => {
+  assert.equal(resolveHebTeam('Netherlands'), 'הולנד');
+  assert.equal(resolveHebTeam('United States'), 'ארצות הברית');
+  assert.equal(resolveHebTeam('DR Congo'), 'קונגו DR');
+  assert.equal(resolveHebTeam('Congo DR'), 'קונגו DR');
+  assert.equal(resolveHebTeam('Bosnia and Herzegovina'), 'בוסניה והרצגובינה');
+  assert.equal(resolveHebTeam('TBD'), null);
+  assert.equal(resolveHebTeam(null), null);
+});
+
+test('utcToNaive trims to minute-precision UTC-naive', () => {
+  assert.equal(utcToNaive('2026-07-04T19:00:00Z'), '2026-07-04T19:00');
+});
+
+test('mapScheduledFixtures adds only new, determined knockout games', () => {
+  const now = Date.parse('2026-07-04T00:00:00Z');
+  const windowEndMs = Date.parse('2026-07-22T00:00:00Z');
+  const existingMatches = {
+    e1: { team1: 'צרפת', team2: 'שוודיה', date: '2026-06-30T21:00', stage: 'R32', result: { team1Goals: 3, team2Goals: 0 } },
+  };
+  const fdMatches = [
+    // new R16 with known teams -> ADD
+    { status: 'SCHEDULED', stage: 'LAST_16', utcDate: '2026-07-05T19:00:00Z',
+      homeTeam: { name: 'Netherlands' }, awayTeam: { name: 'United States' } },
+    // TBD slot -> skip
+    { status: 'SCHEDULED', stage: 'LAST_16', utcDate: '2026-07-05T23:00:00Z',
+      homeTeam: { name: 'Winner Match 78' }, awayTeam: { name: null } },
+    // finished -> skip
+    { status: 'FINISHED', stage: 'LAST_16', utcDate: '2026-07-04T19:00:00Z',
+      homeTeam: { name: 'Brazil' }, awayTeam: { name: 'Morocco' } },
+    // pair already in DB -> skip
+    { status: 'SCHEDULED', stage: 'LAST_16', utcDate: '2026-07-06T19:00:00Z',
+      homeTeam: { name: 'France' }, awayTeam: { name: 'Sweden' } },
+    // group stage -> skip
+    { status: 'SCHEDULED', stage: 'GROUP_STAGE', utcDate: '2026-07-05T19:00:00Z',
+      homeTeam: { name: 'Spain' }, awayTeam: { name: 'Germany' } },
+    // beyond window -> skip
+    { status: 'SCHEDULED', stage: 'FINAL', utcDate: '2026-08-01T19:00:00Z',
+      homeTeam: { name: 'Argentina' }, awayTeam: { name: 'Brazil' } },
+  ];
+  const out = mapScheduledFixtures({ fdMatches, existingMatches, now, windowEndMs });
+  assert.equal(out.length, 1);
+  assert.deepEqual(out[0].match, {
+    team1: 'הולנד', team2: 'ארצות הברית', date: '2026-07-05T19:00', stage: 'R16',
+    group: null, status: 'upcoming', result: null,
+  });
+  assert.equal(out[0].key, 'R16_-_2026-07-05T19:00_הולנד_vs_ארצות הברית');
 });
