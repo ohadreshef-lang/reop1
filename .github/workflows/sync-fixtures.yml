@@ -1,0 +1,24 @@
+name: Sync scheduled fixtures
+
+on:
+  schedule:
+    - cron: '0 6,18 * * *'   # twice a day (06:00 & 18:00 UTC)
+  workflow_dispatch:
+
+concurrency:
+  group: sync-fixtures
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Insert newly-scheduled knockout fixtures
+        run: node scripts/sync-fixtures.mjs
+        env:
+          FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
