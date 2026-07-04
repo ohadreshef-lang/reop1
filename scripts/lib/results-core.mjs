@@ -39,6 +39,61 @@ export function norm(name) {
     return API_ALIASES[n] || n;
 }
 
+// English (football-data) -> Hebrew, keyed by norm() so API_ALIASES bridge spelling differences.
+export const EN_TO_HEB = (() => {
+    const m = {};
+    for (const [he, en] of Object.entries(HEB_TO_EN)) m[norm(en)] = he;
+    return m;
+})();
+export function resolveHebTeam(fdName) { return EN_TO_HEB[norm(fdName)] || null; }
+
+const FD_STAGE = { LAST_32: 'R32', LAST_16: 'R16', QUARTER_FINALS: 'QF', SEMI_FINALS: 'SF',
+                   THIRD_PLACE: '3rd', THIRD_PLACE_FINAL: '3rd', FINAL: 'Final' };
+export function fdStageToOurs(fdStage) { return FD_STAGE[fdStage] || null; }
+
+export function utcToNaive(utcDate) { return String(utcDate || '').slice(0, 16); }
+
+// Mirrors app.js seedMatchKey (stage_group_date_t1_vs_t2, sanitized). group is '-' for knockout.
+export function fixtureKey({ stage, team1, team2, date }) {
+    return `${stage}_-_${date}_${team1}_vs_${team2}`.replace(/[.#$[\]/']/g, '_');
+}
+
+// Turn football-data matches into new knockout fixtures to insert. Add-only: dedups by
+// normalized team-pair against existing matches (knockout pairings are unique), skips group/
+// unknown stages, undetermined (unresolvable) teams, non-scheduled statuses, and out-of-window
+// or long-past games.
+export function mapScheduledFixtures({ fdMatches, existingMatches, now, windowEndMs }) {
+    const pairKey = (a, b) => [a, b].sort().join('|');
+    const existingPairs = new Set();
+    for (const m of Object.values(existingMatches || {})) {
+        if (m && m.team1 && m.team2) existingPairs.add(pairKey(m.team1, m.team2));
+    }
+    const SCHED = new Set(['SCHEDULED', 'TIMED']);
+    const seen = new Set();
+    const out = [];
+    for (const fm of (fdMatches || [])) {
+        if (!fm || !SCHED.has(fm.status)) continue;
+        const stage = fdStageToOurs(fm.stage);
+        if (!stage) continue;
+        const t1 = resolveHebTeam(fm.homeTeam && fm.homeTeam.name);
+        const t2 = resolveHebTeam(fm.awayTeam && fm.awayTeam.name);
+        if (!t1 || !t2) continue;
+        const pk = pairKey(t1, t2);
+        if (existingPairs.has(pk) || seen.has(pk)) continue;
+        const date = utcToNaive(fm.utcDate);
+        const ms = Date.parse(`${date}Z`);
+        if (!date || Number.isNaN(ms)) continue;
+        if (ms < now - 6 * 3600 * 1000) continue;
+        if (windowEndMs && ms > windowEndMs) continue;
+        seen.add(pk);
+        out.push({
+            key: fixtureKey({ stage, team1: t1, team2: t2, date }),
+            match: { team1: t1, team2: t2, date, stage, group: null, status: 'upcoming', result: null },
+        });
+    }
+    return out;
+}
+
 export function parseMatchDate(dateStr) {
     // Naive strings are UTC (mirrors app.js `new Date(dateStr + 'Z')`). Returns ms.
     if (!dateStr) return 0;
