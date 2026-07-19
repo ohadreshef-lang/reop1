@@ -216,6 +216,8 @@ let matches      = {};
 let userBets     = {};
 let allGroupBets = {};
 let onAllGroupBets = null; // named callback so it can be detached precisely
+let allGroupSpecialBets = {};       // all members' champion/top-scorer bets (for the leaderboard)
+let onAllGroupSpecialBets = null;   // named callback so it can be detached precisely
 let activeTab    = 'matches';
 let stageFilter  = 'all';
 let _matchesNeedsFocus = false; // scroll to the last-played match on next matches render
@@ -838,6 +840,11 @@ function stopGroupListeners() {
         onAllGroupBets = null;
     }
     allGroupBets = {};
+    if (onAllGroupSpecialBets) {
+        ref(`specialBets/${currentGroupId}`).off('value', onAllGroupSpecialBets);
+        onAllGroupSpecialBets = null;
+    }
+    allGroupSpecialBets = {};
 }
 
 function handleLogout() {
@@ -978,6 +985,12 @@ function startFirebaseListeners() {
         if (activeTab === 'matches') renderMatches();
     };
     ref(`bets/${currentGroupId}`).on('value', onAllGroupBets, () => {});
+
+    onAllGroupSpecialBets = snap => {
+        allGroupSpecialBets = snap.val() || {};
+        if (activeTab === 'leaderboard') renderLeaderboard();
+    };
+    ref(`specialBets/${currentGroupId}`).on('value', onAllGroupSpecialBets, () => {});
 }
 
 // ============================================================
@@ -1580,6 +1593,20 @@ function renderLeaderboard() {
         return `<span class="lb-form-dot ${cls}">${pts}</span>`;
     }).join('');
 
+    // Each member's tournament special bets (champion + golden boot), with +10 when correct.
+    const specialHtml = uid => {
+        const sb = allGroupSpecialBets[uid] || {};
+        const champPick = sb.winner && sb.winner.team;
+        const bootPick  = sb.topScorer && sb.topScorer.player;
+        if (!champPick && !bootPick) return '';
+        const actualW = tournamentSettings.winner, actualT = tournamentSettings.topScorer;
+        const hit = ' <span class="lb-special-hit">+10</span>';
+        const parts = [];
+        if (champPick) parts.push(`🏆 ${escapeHtml(translateTeam(champPick))}${(actualW && champPick === actualW) ? hit : ''}`);
+        if (bootPick)  parts.push(`⚽ ${escapeHtml(bootPick)}${(actualT && bootPick === actualT) ? hit : ''}`);
+        return `<div class="lb-special">${parts.join(' · ')}</div>`;
+    };
+
     let html = '<div class="leaderboard-table">';
     entries.forEach((u, i) => {
         const rank    = i + 1;
@@ -1589,7 +1616,7 @@ function renderLeaderboard() {
         html += `
         <div class="leaderboard-row ${isMe ? 'is-me' : ''}">
             <span class="lb-rank">${medal}</span>
-            <span class="lb-name">${memberLabel(u.userId, u.name)} ${meTag}</span>
+            <span class="lb-name">${memberLabel(u.userId, u.name)} ${meTag}${specialHtml(u.userId)}</span>
             <span class="lb-form">${formHtml(u.userId)}</span>
             <span class="lb-points">${u.totalPoints} <span class="lb-pts-label">${t('common.pts')}</span></span>
         </div>`;

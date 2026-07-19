@@ -1,0 +1,29 @@
+<!doctype html><meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<body style="direction:rtl">
+<div id="tab-leaderboard" class="tab-panel active"><div id="leaderboard-container" class="app-content"></div></div>
+<script>window.firebase=undefined;window.db=null;window.currentUser={userId:'u1'};
+window.t=k=>({'leaderboard.meTag':'אני','leaderboard.empty':'ריק','common.pts':'נק׳','groupSettings.unknownUser':'?'}[k]||k);
+window.translateTeam=n=>n;window.currentLang='he';</script>
+<script src="../../app.js?cb=1"></script>
+<script>
+  window.activeTournament='worldcup2026';window.stageFilter='all';
+  Object.assign(tournamentSettings,{winner:'ספרד',topScorer:'Kylian Mbappé'});
+  Object.assign(groupMembers,{
+    u1:{name:'A',totalPoints:50}, u2:{name:'B',totalPoints:40}, u3:{name:'C',totalPoints:30},
+  });
+  Object.assign(groupUsersCache,groupMembers);
+  Object.assign(allGroupBets,{});
+  Object.assign(allGroupSpecialBets,{
+    u1:{winner:{team:'ספרד'},topScorer:{player:'Kylian Mbappé'}},          // both correct -> 2x +10
+    u2:{winner:{team:'צרפת'},topScorer:{player:'Harry Kane'}},              // both wrong -> 0 +10
+    // u3: no special bet -> no sub-line
+  });
+  renderLeaderboard();
+  const specials=[...document.querySelectorAll('.lb-special')];
+  const hits=[...document.querySelectorAll('.lb-special-hit')];
+  const rows=[...document.querySelectorAll('.leaderboard-row')];
+  const cRow=rows.find(r=>/(^|\D)C(\D|$)/.test(r.querySelector('.lb-name').textContent));
+  const cNone=cRow && !cRow.querySelector('.lb-special');
+  document.title='SPECIALS:'+specials.length+' HITS:'+hits.length+' CNONE:'+!!cNone;
+</script></body>
